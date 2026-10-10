@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.DEEPSEEK_API_KEY;
 const model = process.env.DEEPSEEK_MODEL || 'deepseek-flash';
+const localRagEnabled = process.env.LOCAL_RAG_ENABLED === 'true';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const knowledgeRoot = path.join(root, '..', 'knowledge');
 
@@ -66,7 +67,7 @@ const server = http.createServer(async (req, res) => {
     if (!question) return send(res, 400, { error: 'question 必须是非空字符串' });
     const context = typeof body.context === 'string' ? body.context.slice(0, 12000) : '';
     const useKnowledge = needsKnowledge(question);
-    const vectorKnowledge = useKnowledge ? await retrieveWithLocalEmbedding(question) : null;
+    const vectorKnowledge = useKnowledge && localRagEnabled ? await retrieveWithLocalEmbedding(question) : null;
     const knowledge = useKnowledge ? (vectorKnowledge?.length ? vectorKnowledge : retrieveKnowledge(question)) : [];
     const knowledgeContext = knowledge.length ? knowledge.map((item, i) => `[资料${i + 1}｜${item.source}]\n${item.text}`).join('\n\n') : '';
     const system = '你是省区虚假拜访质量分析助手。只解释和分析CRM已识别的质检问题，不自行判断站长是否虚假，不查看照片，不编造统计结果。数据统计应优先相信调用方提供的确定性分析结果；不确定时明确说明。回答简洁、先给结论。';
