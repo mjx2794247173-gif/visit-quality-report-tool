@@ -1,0 +1,5 @@
+server/.env
+rag/chroma_db
+rag/__pycache__
+.git
+*.pyc

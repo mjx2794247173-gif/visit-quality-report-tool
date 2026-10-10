@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>质量通报助手</title>
+  <style>
+    :root { --ink:#171717; --muted:#6f6b64; --paper:#f3f0e9; --card:#fffdf8; --line:#ded8cc; --orange:#e86628; --green:#315849; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:"Microsoft YaHei", "Noto Sans SC", sans-serif; }
+    .top { background:var(--ink); color:#fff; padding:34px 7vw 42px; position:relative; overflow:hidden; }
+    .contact { position:absolute; top:20px; right:7vw; z-index:2; color:#c9c5bc; font-size:12px; }
+    .top:after { content:""; position:absolute; width:240px; height:240px; right:8vw; top:-130px; border:1px solid rgba(255,255,255,.18); border-radius:50%; box-shadow:0 0 0 28px rgba(255,255,255,.04),0 0 0 56px rgba(255,255,255,.03); }
+    .eyebrow { color:#ff9d63; font-size:12px; letter-spacing:.18em; text-transform:uppercase; margin-bottom:22px; }
+    h1 { margin:0; max-width:720px; font-size:clamp(34px,6vw,72px); line-height:1.02; letter-spacing:-.06em; }
+    .lead { max-width:560px; margin:22px 0 0; color:#c9c5bc; font-size:16px; line-height:1.8; }
+    main { width:min(1100px,86vw); margin:28px auto 72px; display:flex; flex-direction:column; gap:18px; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 32px rgba(44,36,24,.06); }
+    .chat { height:650px; min-height:520px; display:flex; flex-direction:column; padding:24px; order:3; overflow:hidden; }
+    .panel-title { display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--line); }
+    .panel-title h2 { margin:0; font-size:18px; }
+    .status { color:var(--green); font-size:12px; }
+    .messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding:22px 8px 22px 0; scroll-behavior:smooth; }
+    .messages::-webkit-scrollbar { width:7px; }
+    .messages::-webkit-scrollbar-thumb { background:#cfc8bb; border-radius:999px; }
+    .msg { max-width:88%; padding:14px 16px; border-radius:14px; font-size:14px; line-height:1.75; white-space:pre-line; position:relative; }
+    .answer-wrap { max-width:88%; align-self:flex-start; }
+    .answer-wrap .msg { max-width:100%; }
+    .assistant { background:#f0ede5; align-self:flex-start; }
+    .user { background:var(--ink); color:#fff; align-self:flex-end; }
+    .source { margin-top:10px; padding-top:9px; border-top:1px solid rgba(0,0,0,.1); color:var(--muted); font-size:11px; }
+    .quick { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .quick button { background:#fff; border:1px solid var(--line); border-radius:999px; padding:8px 11px; color:#4e4a43; cursor:pointer; font:inherit; font-size:12px; }
+    .quick button:hover { border-color:var(--orange); color:var(--orange); }
+    .composer { display:flex; gap:10px; flex-shrink:0; padding-top:14px; border-top:1px solid var(--line); background:var(--card); }
+    input { min-width:0; flex:1; border:1px solid var(--line); border-radius:11px; background:#fff; padding:13px 14px; font:inherit; outline:none; }
+    input:focus { border-color:var(--orange); box-shadow:0 0 0 3px rgba(232,102,40,.12); }
+    .send { border:0; border-radius:11px; padding:0 20px; color:#fff; background:var(--orange); font-weight:700; cursor:pointer; }
+    .copy-answer { display:block; margin:4px 0 0 3px; width:18px; height:18px; border:0; border-radius:4px; padding:0; background:transparent; color:#aaa39a; font:inherit; font-size:12px; line-height:18px; cursor:pointer; opacity:.65; }
+    .copy-answer:hover { color:var(--orange); opacity:1; }
+    .side { padding:24px; order:2; }
+    .upload-panel { padding:24px; order:1; }
+    .upload-panel h2 { margin:0 0 8px; font-size:18px; }
+    .upload-panel > p { color:var(--muted); font-size:14px; line-height:1.8; margin:0; }
+    .side h2 { margin:0 0 18px; font-size:18px; }
+    .side p { color:var(--muted); font-size:14px; line-height:1.8; margin:0 0 20px; }
+    .rule { border-top:1px solid var(--line); padding:17px 0; }
+    .rule strong { display:block; font-size:14px; margin-bottom:6px; }
+    .rule span { color:var(--muted); font-size:12px; line-height:1.7; }
+    .notice { margin-top:18px; background:#fff1e8; border-left:3px solid var(--orange); padding:13px 14px; font-size:12px; line-height:1.7; }
+    .upload { margin:20px 0 6px; padding:16px; border:1px dashed #c8bfb1; border-radius:12px; background:#faf8f2; }
+    .upload label, .demo-button { display:inline-block; background:var(--ink); color:#fff; border-radius:9px; padding:10px 13px; font-size:13px; font-weight:700; cursor:pointer; border:0; font-family:inherit; }
+    .demo-button { margin-left:7px; background:#fff; color:var(--ink); border:1px solid var(--line); }
+    .upload input { display:none; }
+    .upload-status { margin-top:10px; color:var(--muted); font-size:12px; }
+    .province-filter { margin-top:10px; width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; font:inherit; color:var(--ink); }
+    @media (max-width:800px) { .top { padding-left:7vw; padding-right:7vw; } .contact { right:7vw; font-size:11px; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="contact">网页问题、数据问题、bug 请联系 mengjiaxi.1</div>
+    <div class="eyebrow">省区拜访质量分析助手</div>
+    <h1>上传数据，<br>找出重点站长。</h1>
+    <p class="lead">上传一份 CRM 导出的虚假拜访 Excel，随时提问。</p>
+  </header>
+  <main>
+    <section class="panel upload-panel">
+      <h2>上传文件</h2>
+      <p>上传 CRM 导出的虚假拜访 Excel，文件仅在当前浏览器中读取。</p>
+      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select></div>
+    </section>
+    <aside class="panel side">
+      <h2>上传后，你可以这样问</h2>
+      <p>选择省区后，直接用自然语言问站长、问题类型、连续日期和重复客户。</p>
+      <div class="rule"><strong>看谁的问题最多</strong><span>例如：华东省区哪位站长拍照不规范最多？</span></div>
+      <div class="rule"><strong>看问题集中在哪里</strong><span>例如：当前省区哪类问题最多？哪些站长涉及多类问题？</span></div>
+      <div class="rule"><strong>看问题是否持续</strong><span>例如：哪些站长连续多天出现问题？哪些客户被重复拜访？</span></div>
+      <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
+    </aside>
+    <section class="panel chat">
+      <div class="panel-title"><h2>问答</h2><span class="status">● 演示知识库已就绪</span></div>
+      <div class="messages" id="messages">
+        <div class="msg assistant">你好，我是质量通报助手。上传 CRM Excel 后，你可以直接问省区内的站长问题、问题类型、连续日期和重复客户。</div>
+      </div>
+      <div class="quick">
+        <button data-q="这段期间哪些站长问题最多？">哪些站长问题最多？</button>
+        <button data-q="哪些站长犯了不止一类问题？">谁涉及多类问题？</button>
+        <button data-q="CRM 怎么筛选才能导出需要的 Excel？">CRM 怎么导出？</button>
+        <button data-q="哪些客户被重复拜访？">哪些客户被重复拜访？</button>
+        <button data-q="生成当前省区分析摘要">生成省区摘要</button>
+        <button data-q="这份 Excel 数据完整吗？">检查数据完整性</button>
+        <button data-q="哪些站长涉及不止一类问题？">多类问题站长</button>
+      </div>
+      <form class="composer" id="composer"><input id="question" placeholder="例如：哪些站长连续多天出现问题？" autocomplete="off"><button class="send">发送</button></form>
+    </section>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+    const messages = document.querySelector('#messages');
+    const input = document.querySelector('#question');
+    const status = document.querySelector('#upload-status');
+    const app = { rows: [], report: null, activeProvince: '', lastAnswer: '' };
+    const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    const text = node => node ? (node.textContent || '').trim() : '';
+    const col = ref => (String(ref || '').match(/[A-Z]+/) || [''])[0];
+    const dateOf = value => { const m=String(value||'').match(/(\d{4})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : ''; };
+    function parseXmlRows(xml, shared) {
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      return Array.from(doc.querySelectorAll('sheetData > row')).map(row => { const item={}; Array.from(row.children).filter(c=>c.tagName==='c').forEach(cell => { const type=cell.getAttribute('t'); const raw=type==='s' ? shared[Number(text(cell.querySelector('v')))] : text(cell.querySelector('is t, v')); item[col(cell.getAttribute('r'))]=raw||''; }); return item; });
+    }
+    async function parseWorkbook(file) {
+      if (file.name.toLowerCase().endsWith('.csv')) { const raw=await file.text(); const lines=raw.split(/\r?\n/).filter(Boolean); const headers=lines.shift().split(',').map(x=>x.trim()); return lines.map(line => { const vals=line.split(','); return Object.fromEntries(headers.map((h,i)=>[h,(vals[i]||'').trim()])); }); }
+      const zip=await JSZip.loadAsync(await file.arrayBuffer()); const sheet=zip.file('xl/worksheets/sheet1.xml'); if(!sheet) throw new Error('未找到第一个工作表');
+      const sharedFile=zip.file('xl/sharedStrings.xml'); const shared=sharedFile ? Array.from(new DOMParser().parseFromString(await sharedFile.async('string'),'application/xml').querySelectorAll('si')).map(text) : [];
+      const raw=parseXmlRows(await sheet.async('string'), shared); if(!raw.length) return [];
+      const refs=Object.keys(raw[0]); const headers=refs.map(r=>raw[0][r]); return raw.slice(1).map(row=>Object.fromEntries(refs.map((r,i)=>[headers[i],row[r]||''])));
+    }
+    function makeReport(rows) {
+      const clean=rows.filter(r=>r['实际拜访时间']&&r['质检问题类型']); const groups=new Map();
+      clean.forEach(r=>{ const types=String(r['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(x=>x&&x!=='反馈内容无意义'); if(!types.length)return; const key=`${r['拜访人主导省区']||'未填写'}|||${r['拜访人ERP']||'未填写'}`; if(!groups.has(key))groups.set(key,{erp:r['拜访人ERP']||'未填写',province:r['拜访人主导省区']||'未填写',records:[],types:new Map(),days:new Set()}); const g=groups.get(key); g.records.push(r); g.days.add(dateOf(r['实际拜访时间'])); types.forEach(t=>g.types.set(t,(g.types.get(t)||0)+1)); });
+      const people=Array.from(groups.values()).map(g=>({...g,visitCount:new Set(g.records.map(r=>r['拜访编码']||r['拜访ID']||`${g.erp}-${g.records.indexOf(r)}`)).size,customerMap:new Map()}));
+      people.forEach(g=>g.records.forEach(r=>{const c=r['客户编码']||r['客户名称'];if(c)g.customerMap.set(c,(g.customerMap.get(c)||0)+1);}));
+      const allTypes=new Map(); clean.forEach(r=>String(r['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(x=>x&&x!=='反馈内容无意义').forEach(t=>allTypes.set(t,(allTypes.get(t)||0)+1)));
+      return {rows:clean,people,allTypes,totalRows:rows.length,ignoredRows:rows.length-clean.length};
+    }
+    function sampleRows() { const people=[['示例erp01','华东省区',['录入内容重复','拍照不规范'],'上门'],['示例erp02','华东省区',['拍照不规范','重复拜访'],'微信'],['示例erp03','华南省区',['疑似虚假上报异常','重复拜访'],'电话']]; return Array.from({length:36},(_,i)=>{const p=people[i%people.length],day=String(i%9+1).padStart(2,'0');return {'拜访编码':`DEMO-${String(i+1).padStart(3,'0')}`,'客户编码':`DEMO-C-${i%8+1}`,'客户名称':`示例客户${i%8+1}`,'拜访人ERP':p[0],'拜访人主导省区':p[1],'实际拜访方式':p[3],'实际拜访时间':`2026-10-${day} 09:20:00`,'质检问题类型':p[2][i%p[2].length]};}); }
+    function prepareProvinceFilter() { const filter=document.querySelector('#province-filter'); const provinces=[...new Set(app.report.people.map(g=>g.province))]; filter.innerHTML='<option value="">全部省区（当前文件）</option>'+provinces.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''); filter.hidden=provinces.length<2; app.activeProvince=''; }
+    function showLoaded(label) { status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条可分析记录，可开始提问。`; const provinces=[...new Set(app.report.people.map(g=>g.province))]; const blocks=provinces.map(p=>{const people=app.report.people.filter(g=>g.province===p);const counts=new Map();people.forEach(g=>g.records.forEach(row=>String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(Boolean).forEach(t=>counts.set(t,(counts.get(t)||0)+1))));const top=Array.from(counts).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([t,n])=>`${t}（${n}条）`).join('、');const stations=people.slice().sort((a,b)=>b.records.length-a.records.length).slice(0,3).map((g,i)=>`${i+1}. ${g.erp}（${g.records.length}条）`).join('；');return `<strong>${esc(p)}</strong><br>重点站长：${esc(stations||'暂无')}<br>主要问题：${esc(top||'暂无')}`;}).join('<br><br>'); const quality=app.report.ignoredRows?`<br><br><span style="color:#9b4d1f">数据提示：原文件 ${app.report.totalRows} 条，${app.report.ignoredRows} 条因缺少拜访时间或质检问题类型未纳入分析。</span>`:''; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">${esc(label)}${quality}<br>当前按省区分析，共 ${app.report.people.length} 位涉及站长、${app.report.allTypes.size} 类问题。<br><br><strong>省区摘要</strong><br>${blocks||'暂无可分析记录'}<br><br>你可以继续问某省区的问题类型、连续日期、多类问题或重复客户。</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); }
+    function answerFromData(q) {
+      if (!app.report) return null;
+      const r=app.report, lower=q.toLowerCase();
+      const province=Array.from(new Set(r.people.map(g=>g.province))).find(p=>p&&lower.includes(String(p).toLowerCase())) || app.activeProvince;
+      const issue=Array.from(r.allTypes.keys()).find(t=>t&&lower.includes(String(t).toLowerCase()));
+      if (lower.includes('完整')||lower.includes('缺失')||lower.includes('数据质量')||lower.includes('检查')) { const missing=r.ignoredRows?`有 ${r.ignoredRows} 条记录因缺少实际拜访时间或质检问题类型未纳入分析。`:'当前记录均具备分析所需的实际拜访时间和质检问题类型。'; return {text:`数据检查结果：原文件共 ${r.totalRows} 条，纳入分析 ${r.rows.length} 条；${missing}核心字段已按列名识别。`,source:'依据：上传文件字段检查与本地解析结果'}; }
+      if (lower.includes('摘要')||lower.includes('汇报')||lower.includes('总结')) { const scope=r.people.filter(g=>!province||g.province===province); const topPeople=scope.slice().sort((a,b)=>b.records.length-a.records.length).slice(0,5).map((g,i)=>`${i+1}.${g.erp}（${g.records.length}条）`).join('、'); const counts=new Map(); scope.forEach(g=>g.records.forEach(row=>String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(x=>x&&x!=='反馈内容无意义').forEach(t=>counts.set(t,(counts.get(t)||0)+1)))); const topTypes=Array.from(counts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([t,n])=>`${t}${n}条`).join('、'); const multi=scope.filter(g=>g.types.size>1).slice(0,8).map(g=>g.erp).join('、')||'暂无'; return {text:`${province||'当前文件'}分析摘要：问题记录较多的站长为 ${topPeople||'暂无'}；主要问题类型为 ${topTypes||'暂无'}；涉及多类问题的站长包括 ${multi}。以上仅汇总 CRM 已识别的质检问题，建议结合正式通报进一步跟进。`,source:'依据：当前上传文件的省区统计'}; }
+      if ((lower.includes('哪位站长')||lower.includes('哪个站长')||lower.includes('谁')) && (province||issue)) { const ranked=r.people.map(g=>{const records=g.records.filter(row=>(!province||g.province===province)&&(!issue||String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).includes(issue)));return {...g,matched:records.length};}).filter(g=>g.matched>0).sort((a,b)=>b.matched-a.matched); return {text:ranked.length?`${province||'当前范围'}中，${issue||'相关问题'}对应拜访最多的站长是：${ranked.slice(0,5).map(g=>`${g.erp}（${g.matched}条）`).join('、')}。`:'当前条件下没有匹配记录。',source:'依据：省区、问题类型与拜访记录的本地统计'}; }
+      if ((lower.includes('哪类问题')||lower.includes('什么问题')) && province) { const counts=new Map(); r.people.filter(g=>g.province===province).forEach(g=>g.records.forEach(row=>String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(Boolean).forEach(t=>counts.set(t,(counts.get(t)||0)+1)))); const items=Array.from(counts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,n])=>`${t}（${n}条拜访）`); return {text:`${province}的问题类型排行：${items.join('、')}。`,source:'依据：指定省区内质检问题类型对应拜访统计'}; }
+      if (lower.includes('客户') && (lower.includes('重复')||lower.includes('多次'))) { const items=[]; r.people.filter(g=>!province||g.province===province).forEach(g=>g.customerMap.forEach((n,c)=>{if(n>1)items.push(`${c}（${n}次，${g.erp}）`);})); return {text:items.length?`重复拜访客户：${items.slice(0,12).join('、')}${items.length>12?' 等':''}。这里按同一客户对应多个拜访编码统计。`:'当前数据没有发现同一客户对应多个拜访编码。',source:'依据：客户编码/名称与拜访编码去重统计'}; }
+      if (lower.includes('多类')||lower.includes('不止一类')||lower.includes('两类')) { const items=r.people.filter(g=>(!province||g.province===province)&&g.types.size>1).sort((a,b)=>b.types.size-a.types.size).slice(0,12).map(g=>`${g.province}—${g.erp}（${g.types.size}类：${Array.from(g.types.keys()).join('、')}）`); return {text:items.length?`涉及多类问题的站长：${items.join('；')}。`:'当前数据没有发现涉及两类及以上问题类型的站长。',source:'依据：站长 ERP 的去重问题类型统计'}; }
+      if (lower.includes('问题最多')||lower.includes('最多')||lower.includes('哪类问题')) { const scopePeople=province?r.people.filter(g=>g.province===province):r.people; const counts=new Map(); scopePeople.forEach(g=>g.records.forEach(row=>String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(x=>x&&x!=='反馈内容无意义').forEach(t=>counts.set(t,(counts.get(t)||0)+1)))); const items=Array.from(counts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,n])=>`${t}（${n}条拜访）`); return {text:`${province||'当前文件'}中问题类型按对应拜访条数排序：${items.join('、')}。${scopePeople.slice().sort((a,b)=>b.records.length-a.records.length).slice(0,5).map(g=>`${g.province}—${g.erp}（${g.records.length}条）`).join('；')}。`,source:'依据：质检问题类型对应的拜访记录统计'}; }
+      if (lower.includes('连续')||lower.includes('多天')) { const items=r.people.filter(g=>!province||g.province===province).map(g=>{const ds=Array.from(g.days).filter(Boolean).sort();let best=1,run=1;for(let i=1;i<ds.length;i++){const diff=(new Date(ds[i])-new Date(ds[i-1]))/86400000;run=diff===1?run+1:1;best=Math.max(best,run);}return {...g,best};}).filter(g=>g.best>1).sort((a,b)=>b.best-a.best).slice(0,12).map(g=>`${g.province}—${g.erp}（连续${g.best}天）`); return {text:items.length?`连续多天出现问题的站长：${items.join('；')}。`:'当前数据没有发现连续两天及以上出现问题的站长。',source:'依据：实际拜访日期去重后按自然日判断'}; }
+      return null;
+    }
+    const staticAnswers=[
+      {keys:['字段','excel','上传'],text:'核心字段包括：拜访编码、客户编码或客户名称、拜访人 ERP、拜访人主导省区、实际拜访时间、实际拜访方式、质检问题类型。系统按列名识别，不按列序号。',source:'依据：CRM 导出字段字典'},
+      {keys:['crm','筛选','导出'],text:'建议在 CRM 的“拜访数据”中按需要的日期、省区和拜访方式筛选，并导出包含拜访编码、客户、站长 ERP、省区、实际拜访时间、实际拜访方式、质检问题类型的 Excel。',source:'依据：CRM 导出字段说明'}
+    ];
+    function ask(q) { if(!q.trim())return; messages.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(q)}</div>`); const dynamic=answerFromData(q); const hit=staticAnswers.find(a=>a.keys.some(k=>q.toLowerCase().includes(k.toLowerCase()))); const result=dynamic||hit||{text:app.report?'我已经读入文件，但还没匹配到这个问题。你可以问：哪些站长连续多天出现问题、哪类问题最多、谁涉及多类问题、哪些客户被重复拜访？':'请先上传 CRM Excel，再问具体的站长、问题类型或客户。',source:''}; app.lastAnswer=result.text; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">${esc(result.text)}</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); messages.lastElementChild.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+    const API_BASE = window.QUALITY_ASSISTANT_API || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8787' : '');
+    async function askWithModel(q) { const dynamic=answerFromData(q); const hit=staticAnswers.find(a=>a.keys.some(k=>q.toLowerCase().includes(k.toLowerCase()))); if(dynamic||hit){ask(q);return;} if(!API_BASE){messages.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(q)}</div><div class="answer-wrap"><div class="msg assistant">线上问答服务尚未配置。</div></div>`); return;} messages.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(q)}</div><div class="answer-wrap" data-model-answer><div class="msg assistant">正在思考…</div></div>`); const slot=messages.querySelector('[data-model-answer] .msg'); try { const response=await fetch(`${API_BASE}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,context:app.report?`当前文件有${app.report.rows.length}条可分析记录，当前省区为${app.activeProvince||'未指定'}`:''})}); const data=await response.json(); if(!response.ok) throw new Error(data.error||'接口调用失败'); app.lastAnswer=data.answer||'暂未得到回答。'; slot.textContent=app.lastAnswer; slot.insertAdjacentHTML('afterend','<button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button>'); } catch(error) { slot.textContent=`暂时无法连接模型：${error.message}`; } messages.querySelector('[data-model-answer]')?.removeAttribute('data-model-answer'); messages.lastElementChild.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+    document.querySelector('#composer').addEventListener('submit',e=>{e.preventDefault();const q=input.value;input.value='';askWithModel(q);}); document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>askWithModel(b.dataset.q)));
+    messages.addEventListener('click',e=>{if(e.target.matches('[data-copy-answer]')){navigator.clipboard?.writeText(app.lastAnswer);e.target.textContent='✓';setTimeout(()=>e.target.textContent='⧉',1200);}});
+    document.querySelector('#excel').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;status.textContent=`正在读取：${f.name}`;try{const rows=await parseWorkbook(f);const required=['拜访编码','拜访人ERP','拜访人主导省区','实际拜访时间','质检问题类型'];const headers=Object.keys(rows[0]||{});const missing=required.filter(x=>!headers.includes(x));if(missing.length)throw new Error(`缺少字段：${missing.join('、')}`);app.rows=rows;app.report=makeReport(rows);prepareProvinceFilter();showLoaded(`文件“${f.name}”已读取。`);}catch(err){app.report=null;status.textContent=`读取失败：${err.message}`;}});
+    document.querySelector('#demo-data').addEventListener('click',()=>{app.rows=sampleRows();app.report=makeReport(app.rows);prepareProvinceFilter();showLoaded('示例数据已加载。');});
+    document.querySelector('#province-filter').addEventListener('change',e=>{app.activeProvince=e.target.value; if(app.activeProvince) messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">已切换到${esc(app.activeProvince)}。接下来的问题默认只在该省区内分析。</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`);});
+  </script>
+</body>
+</html>
