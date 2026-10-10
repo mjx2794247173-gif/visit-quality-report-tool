@@ -70,7 +70,7 @@ const server = http.createServer(async (req, res) => {
     const vectorKnowledge = useKnowledge && localRagEnabled ? await retrieveWithLocalEmbedding(question) : null;
     const knowledge = useKnowledge ? (vectorKnowledge?.length ? vectorKnowledge : retrieveKnowledge(question)) : [];
     const knowledgeContext = knowledge.length ? knowledge.map((item, i) => `[资料${i + 1}｜${item.source}]\n${item.text}`).join('\n\n') : '';
-    const system = '你是省区虚假拜访质量分析助手。只解释和分析CRM已识别的质检问题，不自行判断站长是否虚假，不查看照片，不编造统计结果。数据统计应优先相信调用方提供的确定性分析结果；不确定时明确说明。回答简洁、先给结论。';
+    const system = '你是省区虚假拜访质量分析助手。只解释和分析CRM已识别的质检问题，不自行判断站长是否虚假，不查看照片，不编造统计结果或问题类型示例。只有当前分析结果或业务资料中明确出现的问题类型才可以引用。数据统计应优先相信调用方提供的确定性分析结果；不确定时明确说明。回答简洁、先给结论。';
     const promptParts = [];
     if (context) promptParts.push(`当前分析结果（来自本地确定性程序）：\n${context}`);
     if (knowledgeContext) promptParts.push(`相关业务资料（只依据这些资料回答规则类问题）：\n${knowledgeContext}`);
