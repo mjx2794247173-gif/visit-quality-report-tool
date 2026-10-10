@@ -35,19 +35,23 @@ function retrieveKnowledge(question, limit = 8) {
 }
 
 async function retrieveWithLocalEmbedding(question) {
-  try {
-    const response = await fetch('http://127.0.0.1:8790/retrieve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, top_k: 11 }),
-      signal: AbortSignal.timeout(30000)
-    });
-    if (!response.ok) return null;
-    const result = await response.json();
-    return Array.isArray(result.results) ? result.results : null;
-  } catch {
-    return null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch('http://127.0.0.1:8790/retrieve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, top_k: 11 }),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!response.ok) return null;
+      const result = await response.json();
+      return Array.isArray(result.results) ? result.results : null;
+    } catch (error) {
+      if (attempt === 2) console.warn(`Local RAG unavailable: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
+  return null;
 }
 
 const server = http.createServer(async (req, res) => {
