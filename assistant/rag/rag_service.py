@@ -34,11 +34,6 @@ def get_collection():
     app.state.model = model
     return collection
 
-@app.on_event("startup")
-def warm_up():
-    # 在服务接收请求前完成模型加载，避免线上第一次提问触发冷启动超时。
-    get_collection()
-
 @app.get("/health")
 def health():
     return {"ok": True, "model": MODEL_NAME}
