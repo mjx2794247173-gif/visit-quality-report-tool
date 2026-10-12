@@ -28,13 +28,103 @@
 答案与依据
 ```
 
-## 本地运行（Windows）
+## 本地运行（Windows，新手操作）
 
-1. 安装 Python 3.12。
-2. 双击或在 PowerShell 执行 `start-fastapi.ps1`。
-3. 首次运行会安装 FastAPI 依赖，并自动创建 `server/.env`。
-4. 在 `server/.env` 填入 `DEEPSEEK_API_KEY`。
-5. 打开 <http://localhost:8787>。首次使用向量 RAG 可能需要下载中文 Embedding 模型；网络受限时会自动回退关键词检索。
+下面的步骤只需要第一次配置一次。运行过程中不要把 API Key 发到聊天群或提交到 GitHub。
+
+### 第一步：下载项目
+
+如果电脑安装了 Git，在 PowerShell 中执行：
+
+```powershell
+git clone https://github.com/mjx2794247173-gif/visit-quality-report-tool.git
+cd visit-quality-report-tool\assistant
+```
+
+如果没有安装 Git，也可以在 GitHub 页面点击 **Code → Download ZIP**，解压后进入仓库中的 `assistant` 文件夹。
+
+### 第二步：确认 Python
+
+在当前 PowerShell 窗口执行：
+
+```powershell
+py -3.12 --version
+```
+
+看到 `Python 3.12.x` 就可以继续。如果提示找不到命令，需要先安装 Python 3.12，并在安装时勾选 **Add Python to PATH**。
+
+### 第三步：创建并填写 API 配置
+
+确保 PowerShell 当前目录是项目的 `assistant` 文件夹。可以执行：
+
+```powershell
+Get-Location
+Test-Path .\server
+```
+
+第二条命令返回 `True` 才是正确目录。
+
+创建配置文件：
+
+```powershell
+Copy-Item .\server\.env.example .\server\.env
+```
+
+用记事本打开配置文件：
+
+```powershell
+notepad .\server\.env
+```
+
+把这一行改成自己的 DeepSeek Key：
+
+```env
+DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+```
+
+保存后关闭记事本。不要在 PowerShell 中直接输入 `server/.env`，它是文件路径，不是可执行命令。
+
+### 第四步：启动助手
+
+在 `assistant` 目录中执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\start-fastapi.ps1
+```
+
+第一次启动会自动检查并安装 FastAPI、LangGraph、Chroma 和中文 Embedding 依赖，可能需要几分钟。看到下面的提示，说明后端已经启动：
+
+```text
+Uvicorn running on http://127.0.0.1:8787
+```
+
+保持这个 PowerShell 窗口打开，不要关闭它。
+
+### 第五步：打开网页并测试
+
+浏览器打开：
+
+<http://localhost:8787>
+
+点击“使用示例数据”，然后提问：
+
+```text
+哪些站长问题最多？
+```
+
+也可以上传 `sample_data/crm_visit_quality_demo.csv`。如果返回回答，说明网页、FastAPI、Function Calling 和本地分析链路已经启动成功。
+
+### 常见问题
+
+- **提示路径不存在**：先执行 `cd` 进入 `assistant` 文件夹，再执行后续命令。
+- **PowerShell 不允许运行脚本**：执行 `Set-ExecutionPolicy -Scope Process Bypass`，只对当前窗口生效。
+- **端口被占用**：关闭已经运行的助手窗口，或结束占用 `8787` 端口的进程后再启动。
+- **健康检查**：浏览器打开 <http://localhost:8787/api/health>，看到 `"ok": true` 即表示 FastAPI 正常。
+- **没有 API Key**：本地 Excel 解析仍可用，但 DeepSeek 问答无法运行；检查 `server/.env` 是否填写正确。
+- **首次 RAG 较慢**：首次使用可能下载中文 Embedding 模型；网络受限时会自动回退关键词检索。
+
+停止服务时，在运行 Uvicorn 的 PowerShell 窗口按 `Ctrl+C` 即可。
 
 面试演示可直接上传 `sample_data/crm_visit_quality_demo.csv`（脱敏虚构数据），然后连续提问：
 
