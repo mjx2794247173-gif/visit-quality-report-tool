@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 backend/.venv-ready
 server/.env
+server/assistant_calls.jsonl
+rag/chroma_db/
