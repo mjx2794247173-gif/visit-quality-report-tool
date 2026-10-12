@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from .tools import choose_tool
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env")
@@ -71,12 +72,14 @@ SYSTEM = (
 )
 
 
-async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]]) -> tuple[str, list[str]]:
+async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]], tool_result: dict[str, Any] | None = None) -> tuple[str, list[str]]:
     if not API_KEY:
         return "后端尚未配置 DEEPSEEK_API_KEY。你仍可以使用页面内的确定性分析功能。", [x["source"] for x in knowledge]
     material = []
     if context:
         material.append(f"当前本地分析结果：\n{context}")
+    if tool_result:
+        material.append("已校验的确定性工具结果（优先依据）：\n" + json.dumps(tool_result, ensure_ascii=False))
     if knowledge:
         material.append("相关业务资料：\n" + "\n\n".join(f"[{x['source']}]\n{x['text']}" for x in knowledge))
     material.append(f"用户问题：{question}")
@@ -96,10 +99,11 @@ async def health() -> dict[str, Any]:
 @app.post("/api/chat")
 async def chat(payload: ChatRequest) -> JSONResponse:
     started = time.perf_counter()
-    knowledge = retrieve(payload.question) if route(payload.question) == "knowledge_qa" else []
-    answer, sources = await call_deepseek(payload.question, payload.context, knowledge)
+    selected = choose_tool(payload.question, payload.context)
+    knowledge = retrieve(payload.question) if selected["tool"] == "knowledge_retrieval" else []
+    answer, sources = await call_deepseek(payload.question, payload.context, knowledge, selected.get("result"))
     sessions.setdefault(payload.session_id, {})["last_question"] = payload.question
-    return JSONResponse({"answer": answer, "sources": sorted(set(sources)), "route": route(payload.question), "elapsed_ms": round((time.perf_counter() - started) * 1000)})
+    return JSONResponse({"answer": answer, "sources": sorted(set(sources)), "route": selected["tool"], "tool": selected["tool"], "elapsed_ms": round((time.perf_counter() - started) * 1000)})
 
 
 @app.post("/api/chat/stream")
@@ -109,10 +113,11 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         yield f"data: {json.dumps({'type': 'status', 'text': '正在识别问题…'}, ensure_ascii=False)}\n\n"
         if await request.is_disconnected():
             return
-        knowledge = retrieve(payload.question) if route(payload.question) == "knowledge_qa" else []
+        selected = choose_tool(payload.question, payload.context)
+        knowledge = retrieve(payload.question) if selected["tool"] == "knowledge_retrieval" else []
         yield f"data: {json.dumps({'type': 'status', 'text': '正在检索业务规则…' if knowledge else '正在整理分析结果…'}, ensure_ascii=False)}\n\n"
         try:
-            answer, sources = await call_deepseek(payload.question, payload.context, knowledge)
+            answer, sources = await call_deepseek(payload.question, payload.context, knowledge, selected.get("result"))
             yield f"data: {json.dumps({'type': 'answer', 'answer': answer, 'sources': sorted(set(sources))}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as exc:
