@@ -74,11 +74,13 @@ def explain_score(context: str, station_erp: str | None = None) -> dict[str, Any
     data = _context(context); station = next((x for x in data.get("topStations", []) if x.get("erp") == station_erp), None)
     return {"tool": "explain_score", "erp": station_erp, "station": station, "note": "重点排序沿用页面/通报口径；本工具只解释已提供的结果。"}
 
-def generate_bulletin_summary(context: str) -> dict[str, Any]:
+def generate_bulletin_summary(context: str, province: str | None = None) -> dict[str, Any]:
     data = _context(context)
-    stations = data.get("topStations", []) if isinstance(data.get("topStations", []), list) else []
-    ranking = problem_type_ranking(data)["ranking"]
-    return {"tool":"generate_bulletin_summary", "province":data.get("province","全部省区"), "rows":int(data.get("rows",0) or 0), "top_stations":stations[:10], "problem_type_ranking":ranking[:10], "disclaimer":"仅汇总 CRM 已有质检问题类型，不新增虚假拜访判断。"}
+    selected_province, scoped = _province_stats(data, province)
+    stations = scoped.get("topStations", []) if isinstance(scoped.get("topStations", []), list) else []
+    ranking = problem_type_ranking(data, selected_province)["ranking"]
+    rows = sum(int(s.get("visits", 0) or 0) for s in stations) if selected_province != "全部省区" else int(data.get("rows", 0) or 0)
+    return {"tool":"generate_bulletin_summary", "province":selected_province, "rows":rows, "top_stations":stations[:10], "problem_type_ranking":ranking[:10], "disclaimer":"仅汇总 CRM 已有质检问题类型，不新增虚假拜访判断。"}
 
 def validate_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     valid = isinstance(result, dict) and isinstance(result.get("tool"), str)
@@ -92,7 +94,7 @@ TOOL_DEFINITIONS = [
     {"type":"function","function":{"name":"repeated_customers","description":"返回已由本地统计识别的重复客户","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"data_quality_check","description":"检查上传摘要是否满足分析条件","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"explain_score","description":"解释已生成的重点站长排序，不重新计算评分","parameters":{"type":"object","properties":{"station_erp":{"type":"string"}},"additionalProperties":False}}},
-    {"type":"function","function":{"name":"generate_bulletin_summary","description":"生成基于当前确定性结果的通报摘要","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
+    {"type":"function","function":{"name":"generate_bulletin_summary","description":"生成指定省区的确定性通报摘要","parameters":{"type":"object","properties":{"province":{"type":"string"}},"additionalProperties":False}}},
 ]
 
 TOOL_FUNCTIONS = {name: globals()[name] for name in ("problem_type_ranking", "station_summary", "consecutive_problem_days", "station_multi_problem_types", "repeated_customers", "data_quality_check", "explain_score", "generate_bulletin_summary")}
@@ -112,7 +114,8 @@ def execute_tool(name: str, arguments: dict[str, Any], context: str | dict[str, 
 def choose_tool(question: str, context: str) -> dict[str, Any]:
     if re.search(r"字段|导出|CRM|规则|评分|口径|通报|怎么判定|上传", question, re.I):
         return {"tool": "knowledge_retrieval", "result": None}
-    if re.search(r"连续|多天", question): result = consecutive_problem_days(context)
+    if re.search(r"摘要|汇报|总结", question): result = generate_bulletin_summary(context)
+    elif re.search(r"连续|多天", question): result = consecutive_problem_days(context)
     elif re.search(r"多类|两类|同时", question): result = station_multi_problem_types(context)
     elif re.search(r"重复.*客户|客户.*重复", question): result = repeated_customers(context)
     elif re.search(r"为什么.*排|评分", question): result = explain_score(context)

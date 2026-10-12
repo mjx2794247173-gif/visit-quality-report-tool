@@ -53,6 +53,12 @@ def test_bulletin_summary_is_deterministic_and_bounded():
     assert result["top_stations"][0]["erp"] == "erp-1"
     assert "CRM" in result["disclaimer"]
 
+def test_bulletin_summary_scopes_rows_to_province():
+    scoped = {**CONTEXT, "provinceStats": {"华东省区": {"topStations": [{"erp":"erp-1","visits":3}], "issueTypeCounts": {"拍照不规范": 3}}}}
+    result = generate_bulletin_summary(scoped, "华东")
+    assert result["province"] == "华东省区"
+    assert result["rows"] == 3
+
 def test_supervisor_routes_without_touching_data():
     assert supervise("CRM 导出需要哪些字段？")["branch"] == "knowledge_qa"
     assert supervise("谁连续多天出现问题？")["branch"] == "deterministic_analysis"

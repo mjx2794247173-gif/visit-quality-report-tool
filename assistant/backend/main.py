@@ -160,7 +160,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             name = call.get("function",{}).get("name","")
             try: arguments = json.loads(call.get("function",{}).get("arguments") or "{}")
             except json.JSONDecodeError: arguments = {}
-            if name in {"problem_type_ranking", "station_summary"} and not arguments.get("province"):
+            if name in {"problem_type_ranking", "station_summary", "generate_bulletin_summary"} and not arguments.get("province"):
                 province = infer_province(question, context)
                 if province: arguments["province"] = province
             if name == "knowledge_retrieval":
