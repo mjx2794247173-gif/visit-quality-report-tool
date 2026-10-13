@@ -88,7 +88,7 @@ def generate_bulletin_summary(context: str, province: str | None = None) -> dict
     selected_province, scoped = _province_stats(data, province)
     stations = scoped.get("topStations", []) if isinstance(scoped.get("topStations", []), list) else []
     ranking = problem_type_ranking(data, selected_province)["ranking"]
-    rows = sum(int(s.get("visits", 0) or 0) for s in stations) if selected_province != "全部省区" else int(data.get("rows", 0) or 0)
+    rows = int(data.get("rows", 0) or 0) if not province and not data.get("provinceStats") else (sum(int(s.get("visits", 0) or 0) for s in stations) if selected_province != "全部省区" else int(data.get("rows", 0) or 0))
     return {"tool":"generate_bulletin_summary", "province":selected_province, "rows":rows, "top_stations":stations[:10], "problem_type_ranking":ranking[:10], "disclaimer":"仅汇总 CRM 已有质检问题类型，不新增虚假拜访判断。"}
 
 def validate_tool_result(result: dict[str, Any]) -> dict[str, Any]:
