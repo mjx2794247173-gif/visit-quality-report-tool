@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from .tools import choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
+from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
 from .supervisor import supervise
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,7 @@ _rag_model = None
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     context: str = Field(default="", max_length=500000)
+    erp_lookup: list[dict[str, Any]] | None = None
     session_id: str = Field(default="default", max_length=100)
 
 
@@ -214,9 +215,10 @@ async def health() -> dict[str, Any]:
 async def chat(payload: ChatRequest) -> JSONResponse:
     started = time.perf_counter()
     state = sessions.setdefault(payload.session_id, {"history": []})
-    selected = choose_tool(payload.question, payload.context)
+    context = attach_erp_lookup(payload.context, payload.erp_lookup)
+    selected = choose_tool(payload.question, context)
     try:
-        answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, payload.context, state.get("history", []))
+        answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, context, state.get("history", []))
     except Exception as exc:
         logger.exception("assistant_call_failed")
         return JSONResponse({"error":"模型调用失败","detail":str(exc),"route":selected["tool"],"tool_result":selected.get("result")}, status_code=502)
@@ -236,16 +238,17 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         yield f"data: {json.dumps({'type': 'status', 'text': '正在识别问题…'}, ensure_ascii=False)}\n\n"
         if await request.is_disconnected():
             return
-        selected = choose_tool(payload.question, payload.context)
+        context = attach_erp_lookup(payload.context, payload.erp_lookup)
+        selected = choose_tool(payload.question, context)
         knowledge = retrieve(payload.question) if selected["tool"] == "knowledge_retrieval" else []
         yield f"data: {json.dumps({'type': 'status', 'text': '正在检索业务规则…' if knowledge else '正在整理分析结果…'}, ensure_ascii=False)}\n\n"
         try:
             if selected["tool"] in {"knowledge_retrieval", "fallback"}:
-                answer, sources = await call_deepseek(payload.question, payload.context, knowledge, selected.get("result"))
+                answer, sources = await call_deepseek(payload.question, context, knowledge, selected.get("result"))
                 tool_name, tool_result = selected["tool"], selected.get("result")
             else:
                 yield f"data: {json.dumps({'type': 'status', 'text': '模型正在选择分析工具…'}, ensure_ascii=False)}\n\n"
-                answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, payload.context)
+                answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, context)
             yield f"data: {json.dumps({'type': 'answer', 'answer': answer, 'tool': tool_name, 'tool_result': tool_result, 'sources': sorted(set(sources))}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as exc:

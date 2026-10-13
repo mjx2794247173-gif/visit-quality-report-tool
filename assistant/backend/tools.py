@@ -20,6 +20,17 @@ def _context(context: str | dict[str, Any]) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
 
+
+def attach_erp_lookup(context: str, lookup: list[dict[str, Any]] | None) -> str:
+    """Attach a query-scoped ERP aggregate without sending all CRM rows."""
+    if lookup is None:
+        return context
+    data = _context(context)
+    # An explicit empty list means this ERP was not present in the complete
+    # browser-side index, rather than merely missing from a Top-N summary.
+    data["stationIndex"] = lookup[:3]
+    return json.dumps(data, ensure_ascii=False)
+
 def _province_stats(data: dict[str, Any], province: str | None) -> tuple[str, dict[str, Any]]:
     requested = str(province or data.get("province", "全部省区")).strip()
     stats = data.get("provinceStats", {})
@@ -45,9 +56,10 @@ def station_summary(context: str, province: str | None = None) -> dict[str, Any]
 def station_lookup(context: str, erp: str) -> dict[str, Any]:
     data = _context(context)
     key = str(erp or "").strip().lower()
-    candidates = data.get("stationIndex", [])
-    station = next((item for item in candidates if str(item.get("erp", "")).strip().lower() == key or key in str(item.get("erp", "")).strip().lower()), None)
-    if station is None:
+    candidates = data.get("stationIndex")
+    if isinstance(candidates, list):
+        station = next((item for item in candidates if str(item.get("erp", "")).strip().lower() == key or key in str(item.get("erp", "")).strip().lower()), None)
+    else:
         station = next((item for item in data.get("topStations", []) if str(item.get("erp", "")).strip().lower() == key), None)
     return {"tool":"station_lookup", "erp":erp, "found":station is not None, "station":station, "note":"仅返回当前上传文件中 CRM 已识别质检问题的汇总。"}
 

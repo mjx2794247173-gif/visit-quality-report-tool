@@ -1,5 +1,5 @@
 import json
-from tools import choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
+from tools import attach_erp_lookup, choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
 from supervisor import supervise
 
 CONTEXT = {
@@ -75,3 +75,13 @@ def test_standalone_erp_routes_to_lookup():
     assert extract_erp("查询 shizhuangzhuang 的问题") == "shizhuangzhuang"
     assert selected["tool"] == "station_lookup"
     assert selected["result"]["found"] is True
+
+
+def test_explicit_empty_erp_index_does_not_fall_back_to_top_stations():
+    result = station_lookup({"stationIndex": [], "topStations": [{"erp": "abc001"}]}, "abc001")
+    assert result["found"] is False
+
+
+def test_query_scoped_erp_lookup_replaces_summary_index():
+    context = attach_erp_lookup('{"stationIndex":[],"rows":10}', [{"erp":"abc001","visits":3}])
+    assert station_lookup(context, "abc001")["found"] is True
