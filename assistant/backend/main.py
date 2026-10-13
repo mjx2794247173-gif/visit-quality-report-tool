@@ -29,6 +29,7 @@ load_dotenv(ROOT / "server" / ".env", override=True)
 KNOWLEDGE = ROOT / "knowledge"
 API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+BUILD_VERSION = "2026.10.13-erp-v2"
 
 app = FastAPI(title="虚假拜访问答助手", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -208,7 +209,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto")}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto")}
 
 
 @app.post("/api/chat")
@@ -258,7 +259,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
 
 @app.get("/")
 async def index() -> FileResponse:
-    return FileResponse(ROOT / "index.html")
+    return FileResponse(ROOT / "index.html", headers={"Cache-Control": "no-store", "X-Assistant-Build": BUILD_VERSION})
 
 
 @app.get("/{asset:path}")
@@ -266,4 +267,4 @@ async def assets(asset: str) -> FileResponse:
     target = (ROOT / asset).resolve()
     if ROOT not in target.parents or not target.is_file():
         return FileResponse(ROOT / "index.html")
-    return FileResponse(target)
+    return FileResponse(target, headers={"Cache-Control": "no-store", "X-Assistant-Build": BUILD_VERSION})
