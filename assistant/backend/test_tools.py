@@ -1,5 +1,5 @@
 import json
-from tools import choose_tool, consecutive_problem_days, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
+from tools import choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
 from supervisor import supervise
 
 CONTEXT = {
@@ -67,3 +67,11 @@ def test_station_lookup_by_erp():
     result = station_lookup({"stationIndex":[{"erp":"abc001","province":"上海区","visits":8,"types":["拍照不规范"]}]}, "ABC001")
     assert result["found"] is True
     assert result["station"]["visits"] == 8
+
+
+def test_standalone_erp_routes_to_lookup():
+    context = '{"stationIndex":[{"erp":"shizhuangzhuang","province":"浙江省区","visits":4,"types":["拍照不规范"]}]}'
+    selected = choose_tool("shizhuangzhuang", context)
+    assert extract_erp("查询 shizhuangzhuang 的问题") == "shizhuangzhuang"
+    assert selected["tool"] == "station_lookup"
+    assert selected["result"]["found"] is True

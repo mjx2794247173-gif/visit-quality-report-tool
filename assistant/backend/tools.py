@@ -52,6 +52,17 @@ def station_lookup(context: str, erp: str) -> dict[str, Any]:
     return {"tool":"station_lookup", "erp":erp, "found":station is not None, "station":station, "note":"仅返回当前上传文件中 CRM 已识别质检问题的汇总。"}
 
 
+def extract_erp(question: str) -> str | None:
+    """Extract a likely ERP account from a direct lookup question.
+
+    A standalone latin/digit token such as ``shizhuangzhuang`` is treated as
+    an ERP query.  Chinese-only questions must still be routed by intent.
+    """
+    matches = re.findall(r"(?<![A-Za-z0-9_.-])([A-Za-z][A-Za-z0-9_.-]{2,})(?![A-Za-z0-9_.-])", question or "")
+    ignored = {"erp", "crm", "excel", "api", "json", "fastapi"}
+    return next((value for value in matches if value.lower() not in ignored), None)
+
+
 def data_quality_check(context: str) -> dict[str, Any]:
     data = _context(context)
     present = set(data.get("columns", [])); missing = sorted({"质检问题类型"} - present) if present else []
@@ -124,7 +135,8 @@ def execute_tool(name: str, arguments: dict[str, Any], context: str | dict[str, 
 def choose_tool(question: str, context: str) -> dict[str, Any]:
     if re.search(r"字段|导出|CRM|规则|评分|口径|通报|怎么判定|上传", question, re.I):
         return {"tool": "knowledge_retrieval", "result": None}
-    if re.search(r"erp|站长账号|站长情况|这个站长", question, re.I): result = station_lookup(context, "")
+    erp = extract_erp(question)
+    if erp or re.search(r"erp|站长账号|站长情况|这个站长", question, re.I): result = station_lookup(context, erp or "")
     elif re.search(r"摘要|汇报|总结", question): result = generate_bulletin_summary(context)
     elif re.search(r"连续|多天", question): result = consecutive_problem_days(context)
     elif re.search(r"多类|两类|同时", question): result = station_multi_problem_types(context)

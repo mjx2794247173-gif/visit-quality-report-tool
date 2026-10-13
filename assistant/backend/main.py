@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from .tools import choose_tool, TOOL_DEFINITIONS, execute_tool, validate_tool_result
+from .tools import choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
 from .supervisor import supervise
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +139,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         selected = choose_tool(question, context)
         return "后端尚未配置 DEEPSEEK_API_KEY。你仍可以使用页面内的确定性分析功能。", selected["tool"], selected.get("result"), []
     headers = {"Authorization": f"Bearer {API_KEY}"}
+    preferred = choose_tool(question, context).get("tool")
     memory = ""
     if history:
         memory = "\n最近对话仅用于理解省略主语，不得当作统计来源：\n" + json.dumps(history[-6:], ensure_ascii=False)
@@ -146,13 +147,17 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
     async with httpx.AsyncClient(timeout=45) as client:
         # Disable reasoning mode for the planning pass: DeepSeek thinking mode
         # cannot be combined reliably with forced tool selection.
-        first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":TOOL_DEFINITIONS + [KNOWLEDGE_TOOL],"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+        # A standalone ERP is an unambiguous lookup intent.  Restrict the
+        # available tools for this one case so the model cannot mistake it for
+        # a generic station ranking request.
+        available_tools = TOOL_DEFINITIONS + [KNOWLEDGE_TOOL]
+        if preferred == "station_lookup":
+            available_tools = [item for item in TOOL_DEFINITIONS if item["function"]["name"] == "station_lookup"]
+        first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":available_tools,"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
         if first.status_code >= 400: raise RuntimeError(first.json().get("error",{}).get("message","DeepSeek 工具选择失败"))
         message = first.json()["choices"][0]["message"]
         calls = message.get("tool_calls") or []
         if not calls: raise RuntimeError("模型未返回工具调用，已拒绝使用未经验证的数字")
-        preferred = choose_tool(question, context).get("tool")
-        preferred = "problem_type_ranking" if preferred == "problem_type_ranking" else preferred
         ordered_calls = sorted(calls, key=lambda item: 0 if item.get("function",{}).get("name") == preferred else 1)
         results = []
         tool_messages = []
@@ -160,6 +165,10 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             name = call.get("function",{}).get("name","")
             try: arguments = json.loads(call.get("function",{}).get("arguments") or "{}")
             except json.JSONDecodeError: arguments = {}
+            # The ERP was supplied by the user, so preserve that explicit
+            # condition instead of accepting a model-invented account.
+            if name == "station_lookup" and extract_erp(question):
+                arguments["erp"] = extract_erp(question)
             if name in {"problem_type_ranking", "station_summary", "generate_bulletin_summary"} and not arguments.get("province"):
                 province = infer_province(question, context)
                 if province: arguments["province"] = province
