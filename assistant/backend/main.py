@@ -192,6 +192,15 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         second = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":second_messages,"thinking":{"type":"disabled"},"stream":False,"max_tokens":1200})
         if second.status_code >= 400: raise RuntimeError(second.json().get("error",{}).get("message","DeepSeek 结果解释失败"))
         answer = second.json()["choices"][0]["message"].get("content","")
+        # Low-confidence fallback: a missing ERP is a factual tool outcome.
+        # Do not let the model fill that gap with guesses about Top lists,
+        # truncation, other provinces, or unverified problem types.
+        if name == "station_lookup" and not result.get("found"):
+            requested_erp = str(result.get("erp") or extract_erp(question) or "该 ERP")
+            answer = (
+                f"在当前上传文件的完整 ERP 索引中，未找到“{requested_erp}”的 CRM 已识别质检记录。"
+                "这不代表该站长没有问题，只表示本次上传数据中没有匹配到该 ERP；请核对账号拼写、大小写和导出范围后再查询。"
+            )
         sources = [item.get("source", "") for item in result.get("sources", [])] if name == "knowledge_retrieval" else []
         return answer, name, result, sources
 
