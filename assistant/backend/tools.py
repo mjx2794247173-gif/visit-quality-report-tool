@@ -46,7 +46,7 @@ def station_lookup(context: str, erp: str) -> dict[str, Any]:
     data = _context(context)
     key = str(erp or "").strip().lower()
     candidates = data.get("stationIndex", [])
-    station = next((item for item in candidates if str(item.get("erp", "")).strip().lower() == key), None)
+    station = next((item for item in candidates if str(item.get("erp", "")).strip().lower() == key or key in str(item.get("erp", "")).strip().lower()), None)
     if station is None:
         station = next((item for item in data.get("topStations", []) if str(item.get("erp", "")).strip().lower() == key), None)
     return {"tool":"station_lookup", "erp":erp, "found":station is not None, "station":station, "note":"仅返回当前上传文件中 CRM 已识别质检问题的汇总。"}
