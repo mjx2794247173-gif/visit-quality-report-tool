@@ -1,5 +1,5 @@
 import json
-from tools import choose_tool, consecutive_problem_days, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary
+from tools import choose_tool, consecutive_problem_days, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
 from supervisor import supervise
 
 CONTEXT = {
@@ -62,3 +62,8 @@ def test_bulletin_summary_scopes_rows_to_province():
 def test_supervisor_routes_without_touching_data():
     assert supervise("CRM 导出需要哪些字段？")["branch"] == "knowledge_qa"
     assert supervise("谁连续多天出现问题？")["branch"] == "deterministic_analysis"
+
+def test_station_lookup_by_erp():
+    result = station_lookup({"stationIndex":[{"erp":"abc001","province":"上海区","visits":8,"types":["拍照不规范"]}]}, "ABC001")
+    assert result["found"] is True
+    assert result["station"]["visits"] == 8

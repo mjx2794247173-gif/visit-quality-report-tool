@@ -42,6 +42,15 @@ def station_summary(context: str, province: str | None = None) -> dict[str, Any]
     selected_province, stats = _province_stats(data, province)
     return {"tool": "station_summary", "province": selected_province, "stations": stats.get("topStations", [])}
 
+def station_lookup(context: str, erp: str) -> dict[str, Any]:
+    data = _context(context)
+    key = str(erp or "").strip().lower()
+    candidates = data.get("stationIndex", [])
+    station = next((item for item in candidates if str(item.get("erp", "")).strip().lower() == key), None)
+    if station is None:
+        station = next((item for item in data.get("topStations", []) if str(item.get("erp", "")).strip().lower() == key), None)
+    return {"tool":"station_lookup", "erp":erp, "found":station is not None, "station":station, "note":"仅返回当前上传文件中 CRM 已识别质检问题的汇总。"}
+
 
 def data_quality_check(context: str) -> dict[str, Any]:
     data = _context(context)
@@ -89,6 +98,7 @@ def validate_tool_result(result: dict[str, Any]) -> dict[str, Any]:
 TOOL_DEFINITIONS = [
     {"type":"function","function":{"name":"problem_type_ranking","description":"先识别省区、指标、排序和日期范围，再统计质检问题类型","parameters":{"type":"object","properties":{"province":{"type":"string"},"metric":{"type":"string","enum":["拜访条数"]},"sort":{"type":"string","enum":["asc","desc"]},"date_range":{"type":"string"}},"additionalProperties":False}}},
     {"type":"function","function":{"name":"station_summary","description":"返回指定省区的重点站长摘要","parameters":{"type":"object","properties":{"province":{"type":"string"}},"additionalProperties":False}}},
+    {"type":"function","function":{"name":"station_lookup","description":"按站长ERP查询当前上传文件中的站长情况","parameters":{"type":"object","properties":{"erp":{"type":"string","description":"站长ERP账号"}},"required":["erp"],"additionalProperties":False}}},
     {"type":"function","function":{"name":"consecutive_problem_days","description":"按去重后的自然日计算连续问题天数","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"station_multi_problem_types","description":"找出涉及至少两类质检问题的站长","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"repeated_customers","description":"返回已由本地统计识别的重复客户","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
@@ -97,13 +107,13 @@ TOOL_DEFINITIONS = [
     {"type":"function","function":{"name":"generate_bulletin_summary","description":"生成指定省区的确定性通报摘要","parameters":{"type":"object","properties":{"province":{"type":"string"}},"additionalProperties":False}}},
 ]
 
-TOOL_FUNCTIONS = {name: globals()[name] for name in ("problem_type_ranking", "station_summary", "consecutive_problem_days", "station_multi_problem_types", "repeated_customers", "data_quality_check", "explain_score", "generate_bulletin_summary")}
+TOOL_FUNCTIONS = {name: globals()[name] for name in ("problem_type_ranking", "station_summary", "station_lookup", "consecutive_problem_days", "station_multi_problem_types", "repeated_customers", "data_quality_check", "explain_score", "generate_bulletin_summary")}
 
 def execute_tool(name: str, arguments: dict[str, Any], context: str | dict[str, Any]) -> dict[str, Any]:
     """Execute only a registered function; model arguments cannot supply data."""
     if name not in TOOL_FUNCTIONS:
         return {"tool": name, "error": "未注册的工具"}
-    allowed = {"province", "station_erp"}
+    allowed = {"province", "station_erp", "erp"}
     if name == "problem_type_ranking": allowed |= {"metric", "sort", "date_range"}
     safe_args = {k: v for k, v in arguments.items() if k in allowed}
     result = TOOL_FUNCTIONS[name](context, **safe_args)
@@ -114,7 +124,8 @@ def execute_tool(name: str, arguments: dict[str, Any], context: str | dict[str, 
 def choose_tool(question: str, context: str) -> dict[str, Any]:
     if re.search(r"字段|导出|CRM|规则|评分|口径|通报|怎么判定|上传", question, re.I):
         return {"tool": "knowledge_retrieval", "result": None}
-    if re.search(r"摘要|汇报|总结", question): result = generate_bulletin_summary(context)
+    if re.search(r"erp|站长账号|站长情况|这个站长", question, re.I): result = station_lookup(context, "")
+    elif re.search(r"摘要|汇报|总结", question): result = generate_bulletin_summary(context)
     elif re.search(r"连续|多天", question): result = consecutive_problem_days(context)
     elif re.search(r"多类|两类|同时", question): result = station_multi_problem_types(context)
     elif re.search(r"重复.*客户|客户.*重复", question): result = repeated_customers(context)

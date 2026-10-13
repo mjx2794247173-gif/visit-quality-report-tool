@@ -41,7 +41,7 @@ _rag_model = None
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    context: str = Field(default="", max_length=50000)
+    context: str = Field(default="", max_length=500000)
     session_id: str = Field(default="default", max_length=100)
 
 
