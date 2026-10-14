@@ -47,6 +47,17 @@ class ChatRequest(BaseModel):
     erp_lookup: list[dict[str, Any]] | None = None
     session_id: str = Field(default="default", max_length=100)
 
+class PlanRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    schema_context: dict[str, Any] = Field(default_factory=dict)
+    session_id: str = Field(default="browser-session", max_length=100)
+
+class AnswerRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    plan: dict[str, Any]
+    tool_result: dict[str, Any]
+    session_id: str = Field(default="browser-session", max_length=100)
+
 
 class FeishuSendRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
@@ -122,6 +133,46 @@ SYSTEM = (
 
 KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","description":"检索评分规则、字段说明、CRM导出要求、统计口径、通报规则、FAQ和安全边界","parameters":{"type":"object","properties":{"query":{"type":"string","description":"需要检索的业务知识问题"}},"required":["query"],"additionalProperties":False}}}
 
+SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
+
+@app.post("/api/plan")
+async def plan_query(payload: PlanRequest) -> JSONResponse:
+    if not API_KEY:
+        return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
+    state = sessions.setdefault(payload.session_id, {"history": []})
+    recent = state.get("history", [])[-4:]
+    system = SYSTEM + "你负责把用户自然语言转换为 spreadsheet_query。必须使用提供的省区、问题类型和日期范围；不得把‘虚假’或‘违规’擅自映射成某个具体问题类型。在本应用中，用户口语里的‘虚假次数’默认指当前上传文件中 CRM 已识别质检问题的拜访记录次数，此时 issue_type=null。用户问前几名但未说排名对象时，默认 group_by=station_erp。结合最近对话理解‘这个、刚才、啥意思’等追问。只调用一次工具。"
+    messages = [{"role":"system","content":system},{"role":"user","content":f"最近对话：{json.dumps(recent,ensure_ascii=False)}\n可用数据结构：{json.dumps(payload.schema_context,ensure_ascii=False)}\n用户问题：{payload.question}"}]
+    async with httpx.AsyncClient(timeout=45) as client:
+        response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":[SPREADSHEET_QUERY_TOOL],"tool_choice":{"type":"function","function":{"name":"spreadsheet_query"}},"thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+    if response.status_code >= 400:
+        raise RuntimeError(response.json().get("error",{}).get("message","查询计划生成失败"))
+    call = (response.json()["choices"][0]["message"].get("tool_calls") or [{}])[0]
+    try: plan = json.loads(call.get("function",{}).get("arguments") or "{}")
+    except json.JSONDecodeError: plan = {}
+    filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
+    issue_type = filters.get("issue_type")
+    if issue_type and str(issue_type) not in payload.question:
+        filters["issue_type"] = None
+    plan["filters"] = filters
+    return JSONResponse({"tool":"spreadsheet_query","plan":plan})
+
+@app.post("/api/answer")
+async def answer_query(payload: AnswerRequest) -> JSONResponse:
+    result = payload.tool_result
+    if result.get("tool") != "spreadsheet_query" or not isinstance(result.get("rows"), list):
+        return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
+    state = sessions.setdefault(payload.session_id, {"history": []})
+    answer_system = SYSTEM + "当前上传文件本身就是 CRM 质检问题数据。若查询计划 issue_type 为空，表示统计全部 CRM 已识别质检问题记录；直接按用户口语称为‘疑似虚假拜访记录’或‘CRM 已识别问题记录’，不要说缺少虚假数据，不要要求用户再指定问题类型，不要质疑工具结果。只解释本次过滤范围、排名和统计口径。"
+    material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":state.get("history",[])[-3:]}
+    async with httpx.AsyncClient(timeout=45) as client:
+        response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
+    if response.status_code >= 400:
+        raise RuntimeError(response.json().get("error",{}).get("message","回答生成失败"))
+    answer = response.json()["choices"][0]["message"].get("content","").replace("**","")
+    state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":result.get("rows",[])[:10],"answer":answer}])[-6:]
+    return JSONResponse({"answer":answer,"tool":"spreadsheet_query","tool_result":result,"validation":{"valid":True}})
+
 
 async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]], tool_result: dict[str, Any] | None = None) -> tuple[str, list[str]]:
     if not API_KEY:
@@ -161,6 +212,8 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         # a generic station ranking request.
         available_tools = TOOL_DEFINITIONS + [KNOWLEDGE_TOOL]
         if preferred == "station_lookup":
+            # An explicit ERP is an unambiguous lookup. Other questions remain
+            # available to the model so it can interpret intent and constraints.
             available_tools = [item for item in TOOL_DEFINITIONS if item["function"]["name"] == "station_lookup"]
         first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":available_tools,"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
         if first.status_code >= 400: raise RuntimeError(first.json().get("error",{}).get("message","DeepSeek 工具选择失败"))
@@ -174,6 +227,14 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             name = call.get("function",{}).get("name","")
             try: arguments = json.loads(call.get("function",{}).get("arguments") or "{}")
             except json.JSONDecodeError: arguments = {}
+            # Validate the model's selected tool against the deterministic
+            # intent guard. A station-ranking question must not be answered
+            # with an issue-type ranking just because words like “虚假” or
+            # “违规” resemble a CRM issue label.
+            if preferred == "station_summary" and name == "problem_type_ranking":
+                name = "station_summary"
+                arguments = {}
+                call.setdefault("function", {})["name"] = name
             # The ERP was supplied by the user, so preserve that explicit
             # condition instead of accepting a model-invented account.
             if name == "station_lookup" and extract_erp(question):
@@ -181,6 +242,19 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             if name in {"problem_type_ranking", "station_summary", "generate_bulletin_summary"} and not arguments.get("province"):
                 province = infer_province(question, context)
                 if province: arguments["province"] = province
+            if name == "station_summary" and not arguments.get("date"):
+                match = re.search(r"(\d{1,2})[-/.月](\d{1,2})", question)
+                if match:
+                    year = datetime.now().year
+                    arguments["date"] = f"{year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
+            if name == "station_summary" and not arguments.get("top_n"):
+                top_match = re.search(r"(?:前|top\s*)(\d+)", question, re.I)
+                chinese_top = re.search(r"前([一二三四五六七八九十])", question)
+                chinese_numbers = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
+                if top_match:
+                    arguments["top_n"] = int(top_match.group(1))
+                elif chinese_top:
+                    arguments["top_n"] = chinese_numbers[chinese_top.group(1)]
             if name == "knowledge_retrieval":
                 query = arguments.get("query") if isinstance(arguments, dict) else question
                 docs = retrieve(query or question)

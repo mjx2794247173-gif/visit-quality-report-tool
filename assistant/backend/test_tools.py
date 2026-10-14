@@ -1,5 +1,5 @@
 import json
-from tools import attach_erp_lookup, choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup
+from tools import attach_erp_lookup, choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup, has_date_condition
 from supervisor import supervise
 
 CONTEXT = {
@@ -75,6 +75,31 @@ def test_standalone_erp_routes_to_lookup():
     assert extract_erp("查询 shizhuangzhuang 的问题") == "shizhuangzhuang"
     assert selected["tool"] == "station_lookup"
     assert selected["result"]["found"] is True
+
+
+def test_station_subject_queries_do_not_route_to_issue_type_ranking():
+    assert choose_tool("找出虚假的站长", CONTEXT)["tool"] == "station_summary"
+    assert choose_tool("哪些站长问题最多？", CONTEXT)["tool"] == "station_summary"
+    assert choose_tool("哪类问题最多？", CONTEXT)["tool"] == "problem_type_ranking"
+
+
+def test_exact_station_date_issue_count_routes_to_deterministic_tool():
+    context = {"queryDetail": {"erp": "liheng105", "date": "2026-10-12", "issue_type": "录入内容重复", "visits": 3, "matched": True}}
+    selected = choose_tool("liheng105 在 2026-10-12 录入内容重复多少次？", context)
+    assert selected["tool"] == "station_issue_date_count"
+    assert selected["result"]["visits"] == 3
+
+
+def test_natural_language_date_variants_are_recognized():
+    for question in ("10-12 哪个站长问题最多", "10月12日哪个站长违规最多", "10/12 谁最多", "2026年10月12日哪个站长次数最多", "当天哪个站长最多"):
+        assert has_date_condition(question)
+
+
+def test_implicit_top_n_defaults_to_station_ranking():
+    assert choose_tool("10/09 全国虚假前五", CONTEXT)["tool"] == "station_summary"
+    assert choose_tool("全国问题类型前五", CONTEXT)["tool"] == "problem_type_ranking"
+    result = execute_tool("station_summary", {"top_n": 1}, CONTEXT)
+    assert len(result["stations"]) == 1
 
 
 def test_explicit_empty_erp_index_does_not_fall_back_to_top_stations():
