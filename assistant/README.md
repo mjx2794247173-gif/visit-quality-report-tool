@@ -11,6 +11,7 @@
 - LangGraph Supervisor 真实编排问题分流：规则/RAG、确定性分析和兜底三条分支，并在 `/api/health` 暴露是否加载成功。
 - 知识库按 Markdown 文档维护，可接入 Chroma + 中文 Embedding；当前轻量运行也支持关键词回退。
 - 会话状态记录当前问题和分析上下文，方便连续追问。
+- 使用飞书官方 OpenAPI MCP 将已校验回答推送到固定群聊；只开放消息发送工具，并要求用户二次确认。
 
 ## 架构
 
@@ -26,6 +27,8 @@
  RAG 检索业务资料 / DeepSeek 解释
         ↓
 答案与依据
+        ↓ 用户确认
+飞书官方 MCP（仅 im.v1.message.create）
 ```
 
 ## 本地运行（Windows）
@@ -35,6 +38,16 @@
 3. 首次运行会安装 FastAPI 依赖，并自动创建 `server/.env`。
 4. 在 `server/.env` 填入 `DEEPSEEK_API_KEY`。
 5. 打开 <http://localhost:8787>。首次使用向量 RAG 可能需要下载中文 Embedding 模型；网络受限时会自动回退关键词检索。
+
+### 可选：接入飞书群消息
+
+1. 安装 Node.js 20 或更高版本。
+2. 在飞书开放平台创建企业自建应用，启用机器人能力和发送消息权限，并把机器人加入目标群。
+3. 获取目标群的 `chat_id`。
+4. 在 `server/.env` 填写 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_RECEIVE_ID`。
+5. 重启 FastAPI。生成回答后点击“推送飞书”，确认预览即可发送。
+
+后端固定使用官方 `@larksuiteoapi/lark-mcp`，且只启用 `im.v1.message.create`。浏览器不能修改目标群，模型也不能直接触发发送；真实凭证和群 ID 不得提交到 GitHub。
 
 面试演示可直接上传 `sample_data/crm_visit_quality_demo.csv`（脱敏虚构数据），然后连续提问：
 
@@ -58,6 +71,8 @@ py -3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 8787
 - `GET /api/health`：检查服务和密钥状态
 - `POST /api/chat`：普通问答
 - `POST /api/chat/stream`：SSE 流式问答
+- `GET /api/feishu/status`：检查飞书 MCP 配置，不返回凭证或群 ID
+- `POST /api/feishu/send`：确认后把一条已生成回答推送到固定飞书目标
 
 数据分析链路约束：模型不得自行计算关键统计数字；工具执行只使用浏览器传入的聚合上下文，不接受模型提供的原始数据或任意代码。
 

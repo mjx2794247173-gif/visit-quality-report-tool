@@ -23,13 +23,14 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
 from .supervisor import supervise
+from .feishu import get_feishu_status, send_feishu_message
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
 KNOWLEDGE = ROOT / "knowledge"
 API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-BUILD_VERSION = "2026.10.13-erp-v2"
+BUILD_VERSION = "2026.10.14-feishu-mcp-v1"
 
 app = FastAPI(title="虚假拜访问答助手", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -45,6 +46,12 @@ class ChatRequest(BaseModel):
     context: str = Field(default="", max_length=500000)
     erp_lookup: list[dict[str, Any]] | None = None
     session_id: str = Field(default="default", max_length=100)
+
+
+class FeishuSendRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    confirmed: bool = False
+    session_id: str = Field(default="browser-session", max_length=100)
 
 
 def chunks(text: str) -> list[dict[str, str]]:
@@ -209,7 +216,36 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto")}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "feishu": get_feishu_status()}
+
+
+@app.get("/api/feishu/status")
+async def feishu_status() -> dict[str, Any]:
+    """Return configuration readiness without exposing credentials or target IDs."""
+    return get_feishu_status()
+
+
+@app.post("/api/feishu/send")
+async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
+    """Publish one explicitly confirmed assistant answer through official MCP."""
+    if not payload.confirmed:
+        return JSONResponse({"error": "发送前必须由用户确认"}, status_code=400)
+    status = get_feishu_status()
+    if not status["configured"]:
+        return JSONResponse(
+            {"error": "飞书推送尚未配置完成", "missing": status["missing"], "runtime_available": status["runtime_available"]},
+            status_code=409,
+        )
+    started = time.perf_counter()
+    try:
+        result = await send_feishu_message(payload.content)
+    except Exception as exc:
+        logger.exception("feishu_publish_failed")
+        audit({"session_id": payload.session_id, "action": "feishu_publish", "ok": False, "error_type": type(exc).__name__})
+        return JSONResponse({"error": "飞书推送失败", "detail": str(exc)}, status_code=502)
+    elapsed = round((time.perf_counter() - started) * 1000)
+    audit({"session_id": payload.session_id, "action": "feishu_publish", "ok": True, "tool": result["tool"], "elapsed_ms": elapsed})
+    return JSONResponse({**result, "elapsed_ms": elapsed})
 
 
 @app.post("/api/chat")
