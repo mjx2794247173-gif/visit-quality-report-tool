@@ -1,9 +1,10 @@
 import asyncio
+import json
 
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -207,6 +208,26 @@ def test_relevance_filter_can_reject_all_candidates():
 def test_source_ranking_rejects_extra_model_output():
     with pytest.raises(ValidationError):
         RetrievalRanking.model_validate({"ranked_indices": [0], "relevant_indices": [0], "answer": "额外答案"})
+
+
+def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
+    audit_file = tmp_path / "audit.jsonl"
+    monkeypatch.setattr("assistant.backend.main.AUDIT_LOG", audit_file)
+    audit({
+        "action": "answer",
+        "ok": True,
+        "tool": "knowledge_retrieval",
+        "source_count": 3,
+        "question": "不应记录的用户问题",
+        "rows": [{"customer": "不应记录的客户"}],
+        "answer": "不应记录的回答正文",
+    })
+    saved = json.loads(audit_file.read_text(encoding="utf-8"))
+    assert saved["action"] == "answer"
+    assert saved["source_count"] == 3
+    assert "question" not in saved
+    assert "rows" not in saved
+    assert "answer" not in saved
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

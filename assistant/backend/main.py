@@ -38,6 +38,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 sessions: dict[str, dict[str, Any]] = {}
 logger = logging.getLogger("visit_quality_assistant")
 AUDIT_LOG = ROOT / "server" / "assistant_calls.jsonl"
+AUDIT_ALLOWED_FIELDS = {
+    "action", "ok", "agent", "tool", "route", "validated", "source_count",
+    "retrieval_attempts", "rerank_applied", "relevance_filter_applied",
+    "sufficient", "elapsed_ms", "error_type", "status",
+}
 _rag_collection = None
 _rag_model = None
 
@@ -202,7 +207,8 @@ def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
 
 def audit(event: dict[str, Any]) -> None:
     """Write metadata only; never persist CRM rows, customer names, or context."""
-    safe = {"time": datetime.now(timezone.utc).isoformat(), **event}
+    safe = {"time": datetime.now(timezone.utc).isoformat()}
+    safe.update({key:value for key, value in event.items() if key in AUDIT_ALLOWED_FIELDS})
     try:
         with AUDIT_LOG.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(safe, ensure_ascii=False) + "\n")
@@ -467,7 +473,9 @@ MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
 
 @app.post("/api/plan")
 async def plan_query(payload: PlanRequest) -> JSONResponse:
+    started = time.perf_counter()
     if not API_KEY:
+        audit({"action":"plan","ok":False,"status":"model_not_configured","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
     state = sessions.setdefault(payload.session_id, {"history": []})
     recent = state.get("history", [])[-4:]
@@ -475,11 +483,14 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
         graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent})
     except RuntimeError as exc:
         logger.exception("multi_agent_plan_failed")
+        audit({"action":"plan","ok":False,"error_type":type(exc).__name__,"elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":str(exc)}, status_code=502)
+    audit({"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":graph_result.get("plan",{})})
 
 @app.post("/api/answer")
 async def answer_query(payload: AnswerRequest) -> JSONResponse:
+    started = time.perf_counter()
     result = payload.tool_result
     tool_name = str(result.get("tool") or "")
     if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
@@ -516,6 +527,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             answer = f"当前知识库资料不足以可靠回答这个问题：{detail}{separator}为避免编造，我先不做推断。"
             state = sessions.setdefault(payload.session_id, {"history": []})
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
+            audit({"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
         content = str(result.get("content") or "").strip()
@@ -532,16 +544,20 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
     except httpx.HTTPError:
         logger.exception("answer_model_request_failed")
+        audit({"action":"answer","ok":False,"tool":tool_name,"error_type":"HTTPError","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"模型服务暂时不可用，请稍后重试"}, status_code=502)
     if response.status_code >= 400:
+        audit({"action":"answer","ok":False,"tool":tool_name,"status":"upstream_error","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":upstream_error(response, "回答生成失败，请稍后重试")}, status_code=502)
     try:
         answer = response.json()["choices"][0]["message"].get("content","").replace("**","")
     except (ValueError, TypeError, KeyError, IndexError):
         logger.exception("answer_model_response_invalid")
+        audit({"action":"answer","ok":False,"tool":tool_name,"status":"invalid_model_response","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
+    audit({"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
 
@@ -661,7 +677,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
