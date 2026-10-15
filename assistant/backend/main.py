@@ -13,7 +13,7 @@ import time
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 from dotenv import load_dotenv
@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
@@ -156,40 +157,118 @@ FEISHU_PREVIEW_TOOL = {"type":"function","function":{"name":"feishu_publish_prev
 
 PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL]
 
+DELEGATE_AGENT_TOOL = {"type":"function","function":{"name":"delegate_to_agent","description":"根据用户意图把任务委派给一个专业 Agent。","parameters":{"type":"object","properties":{"agent":{"type":"string","enum":["data_agent","knowledge_agent","quality_agent","publishing_agent"]}},"required":["agent"],"additionalProperties":False}}}
+
+
+class MultiAgentState(TypedDict, total=False):
+    question: str
+    schema_context: dict[str, Any]
+    recent: list[dict[str, Any]]
+    agent: str
+    tool: str
+    plan: dict[str, Any]
+
+
+async def _function_call(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    """Ask DeepSeek for exactly one tool call and return its validated envelope."""
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {API_KEY}"},
+                json={"model": MODEL, "messages": messages, "tools": tools, "tool_choice": "required", "thinking": {"type": "disabled"}, "stream": False, "max_tokens": 600},
+            )
+    except httpx.HTTPError as exc:
+        raise RuntimeError("模型服务暂时不可用，请稍后重试") from exc
+    if response.status_code >= 400:
+        raise RuntimeError(upstream_error(response, "模型工具调用失败，请稍后重试"))
+    try:
+        call = (response.json()["choices"][0]["message"].get("tool_calls") or [])[0]
+        name = str(call["function"]["name"])
+        arguments = json.loads(call["function"].get("arguments") or "{}")
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
+        raise RuntimeError("模型返回的工具调用格式异常，请重试") from exc
+    return name, arguments if isinstance(arguments, dict) else {}
+
+
+async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
+    messages = [
+        {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent。必须调用 delegate_to_agent。"},
+        {"role":"user","content":f"最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
+    ]
+    _, arguments = await _function_call(messages, [DELEGATE_AGENT_TOOL])
+    agent = str(arguments.get("agent") or "")
+    if agent not in {"data_agent", "knowledge_agent", "quality_agent", "publishing_agent"}:
+        raise RuntimeError("Supervisor 未能选择有效的专业 Agent")
+    return {**state, "agent": agent}
+
+
+def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, Any]]:
+    return [
+        {"role":"system","content":SYSTEM + instruction},
+        {"role":"user","content":f"最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
+    ]
+
+
+async def data_agent(state: MultiAgentState) -> MultiAgentState:
+    instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
+    tool, plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
+    filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
+    issue_type = filters.get("issue_type")
+    if issue_type and str(issue_type) not in state["question"]:
+        filters["issue_type"] = None
+    plan["filters"] = filters
+    return {**state, "tool": tool, "plan": plan}
+
+
+async def knowledge_agent(state: MultiAgentState) -> MultiAgentState:
+    tool, plan = await _function_call(_agent_messages(state, "你是知识问答 Agent，只能调用 knowledge_retrieval 检索业务规则、统计口径、评分和CRM导出说明，不得凭模型记忆编造规则。"), [KNOWLEDGE_TOOL])
+    return {**state, "tool": tool, "plan": plan}
+
+
+async def quality_agent(state: MultiAgentState) -> MultiAgentState:
+    tool, plan = await _function_call(_agent_messages(state, "你是数据质量 Agent，只能调用 data_quality_check 检查当前上传文件。"), [DATA_QUALITY_TOOL])
+    return {**state, "tool": tool, "plan": plan}
+
+
+async def publishing_agent(state: MultiAgentState) -> MultiAgentState:
+    tool, plan = await _function_call(_agent_messages(state, "你是发布 Agent，只能调用 feishu_publish_preview 准备上一条已校验回答的发布预览，不得声称已经发送。"), [FEISHU_PREVIEW_TOOL])
+    return {**state, "tool": tool, "plan": plan}
+
+
+def _next_agent(state: MultiAgentState) -> str:
+    return state["agent"]
+
+
+_multi_agent_builder = StateGraph(MultiAgentState)
+_multi_agent_builder.add_node("supervisor_agent", supervisor_agent)
+_multi_agent_builder.add_node("data_agent", data_agent)
+_multi_agent_builder.add_node("knowledge_agent", knowledge_agent)
+_multi_agent_builder.add_node("quality_agent", quality_agent)
+_multi_agent_builder.add_node("publishing_agent", publishing_agent)
+_multi_agent_builder.set_entry_point("supervisor_agent")
+_multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
+    "data_agent":"data_agent",
+    "knowledge_agent":"knowledge_agent",
+    "quality_agent":"quality_agent",
+    "publishing_agent":"publishing_agent",
+})
+for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent"):
+    _multi_agent_builder.add_edge(_agent_node, END)
+MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
+
 @app.post("/api/plan")
 async def plan_query(payload: PlanRequest) -> JSONResponse:
     if not API_KEY:
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
     state = sessions.setdefault(payload.session_id, {"history": []})
     recent = state.get("history", [])[-4:]
-    system = SYSTEM + "你负责根据用户意图从四个工具中选择且只调用一个：数据统计用 spreadsheet_query；规则、口径和导出说明用 knowledge_retrieval；文件字段、空值和可分析性检查用 data_quality_check；用户明确要求发送或推送飞书时用 feishu_publish_preview。数据查询必须使用提供的省区、问题类型和日期范围；不得把‘虚假’或‘违规’擅自映射成某个具体问题类型。在本应用中，用户口语里的‘虚假次数’默认指当前上传文件中 CRM 已识别质检问题的拜访记录次数，此时 issue_type=null。用户问前几名但未说排名对象时，默认 group_by=station_erp。结合最近对话理解‘这个、刚才、啥意思’等追问。"
-    messages = [{"role":"system","content":system},{"role":"user","content":f"最近对话：{json.dumps(recent,ensure_ascii=False)}\n可用数据结构：{json.dumps(payload.schema_context,ensure_ascii=False)}\n用户问题：{payload.question}"}]
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":PLANNER_TOOLS,"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
-    except httpx.HTTPError:
-        logger.exception("plan_model_request_failed")
-        return JSONResponse({"error":"模型服务暂时不可用，请稍后重试"}, status_code=502)
-    if response.status_code >= 400:
-        return JSONResponse({"error":upstream_error(response, "查询计划生成失败，请稍后重试")}, status_code=502)
-    try:
-        model_payload = response.json()
-        call = (model_payload["choices"][0]["message"].get("tool_calls") or [{}])[0]
-    except (ValueError, TypeError, KeyError, IndexError):
-        logger.exception("plan_model_response_invalid")
-        return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
-    tool_name = call.get("function",{}).get("name","")
-    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
-        return JSONResponse({"error":"模型选择了未开放的工具"}, status_code=422)
-    try: plan = json.loads(call.get("function",{}).get("arguments") or "{}")
-    except json.JSONDecodeError: plan = {}
-    if tool_name == "spreadsheet_query":
-        filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
-        issue_type = filters.get("issue_type")
-        if issue_type and str(issue_type) not in payload.question:
-            filters["issue_type"] = None
-        plan["filters"] = filters
-    return JSONResponse({"tool":tool_name,"plan":plan})
+        graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent})
+    except RuntimeError as exc:
+        logger.exception("multi_agent_plan_failed")
+        return JSONResponse({"error":str(exc)}, status_code=502)
+    return JSONResponse({"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":graph_result.get("plan",{})})
 
 @app.post("/api/answer")
 async def answer_query(payload: AnswerRequest) -> JSONResponse:

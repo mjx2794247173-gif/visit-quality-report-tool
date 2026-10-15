@@ -1,4 +1,4 @@
-from assistant.backend.main import PLANNER_TOOLS
+from assistant.backend.main import MULTI_AGENT_GRAPH, PLANNER_TOOLS
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -26,3 +26,14 @@ def test_feishu_function_only_prepares_a_confirmed_preview():
     )
     assert "只准备内容" in tool["description"]
     assert tool["parameters"]["properties"] == {}
+
+
+def test_langgraph_contains_supervisor_and_specialist_agents():
+    nodes = set(MULTI_AGENT_GRAPH.get_graph().nodes)
+    assert {
+        "supervisor_agent",
+        "data_agent",
+        "knowledge_agent",
+        "quality_agent",
+        "publishing_agent",
+    } <= nodes
