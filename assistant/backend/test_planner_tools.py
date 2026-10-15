@@ -4,7 +4,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -218,6 +218,7 @@ def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
         "ok": True,
         "tool": "knowledge_retrieval",
         "source_count": 3,
+        "trace_id": "a" * 32,
         "question": "不应记录的用户问题",
         "rows": [{"customer": "不应记录的客户"}],
         "answer": "不应记录的回答正文",
@@ -225,9 +226,17 @@ def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
     saved = json.loads(audit_file.read_text(encoding="utf-8"))
     assert saved["action"] == "answer"
     assert saved["source_count"] == 3
+    assert saved["trace_id"] == "a" * 32
     assert "question" not in saved
     assert "rows" not in saved
     assert "answer" not in saved
+
+
+def test_answer_trace_id_must_be_anonymous_hex_identifier():
+    payload = {"question":"测试", "plan":{}, "tool_result":{"tool":"data_quality_check"}}
+    assert AnswerRequest.model_validate({**payload, "trace_id":"a" * 32}).trace_id == "a" * 32
+    with pytest.raises(ValidationError):
+        AnswerRequest.model_validate({**payload, "trace_id":"customer-name"})
 
 
 def test_no_argument_tools_reject_model_invented_parameters():
