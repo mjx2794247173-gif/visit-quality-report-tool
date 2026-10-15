@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
 from .supervisor import supervise
@@ -69,10 +69,13 @@ class FeishuSendRequest(BaseModel):
 class AgentDecision(BaseModel):
     """Validated output contract for the LangGraph supervisor."""
 
+    model_config = ConfigDict(extra="forbid")
     agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent"]
 
 
 class SpreadsheetFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     province: str | None = None
     date_from: str | None = None
     date_to: str | None = None
@@ -83,6 +86,7 @@ class SpreadsheetFilters(BaseModel):
 class SpreadsheetPlan(BaseModel):
     """Validated query contract produced by the data specialist Agent."""
 
+    model_config = ConfigDict(extra="forbid")
     filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
     group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"]
     metric: Literal[
@@ -94,6 +98,19 @@ class SpreadsheetPlan(BaseModel):
     ]
     order: Literal["desc", "asc"]
     limit: int = Field(ge=1, le=50)
+
+
+class KnowledgePlan(BaseModel):
+    """Validated retrieval query produced by the knowledge specialist Agent."""
+
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=500)
+
+
+class EmptyToolPlan(BaseModel):
+    """Contract for specialist tools that intentionally accept no arguments."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def chunks(text: str) -> list[dict[str, str]]:
@@ -258,17 +275,29 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
 
 
 async def knowledge_agent(state: MultiAgentState) -> MultiAgentState:
-    tool, plan = await _function_call(_agent_messages(state, "你是知识问答 Agent，只能调用 knowledge_retrieval 检索业务规则、统计口径、评分和CRM导出说明，不得凭模型记忆编造规则。"), [KNOWLEDGE_TOOL])
+    tool, raw_plan = await _function_call(_agent_messages(state, "你是知识问答 Agent，只能调用 knowledge_retrieval 检索业务规则、统计口径、评分和CRM导出说明，不得凭模型记忆编造规则。"), [KNOWLEDGE_TOOL])
+    try:
+        plan = KnowledgePlan.model_validate(raw_plan).model_dump()
+    except Exception as exc:
+        raise RuntimeError("Knowledge Agent 返回了无效的检索计划，请重试") from exc
     return {**state, "tool": tool, "plan": plan}
 
 
 async def quality_agent(state: MultiAgentState) -> MultiAgentState:
-    tool, plan = await _function_call(_agent_messages(state, "你是数据质量 Agent，只能调用 data_quality_check 检查当前上传文件。"), [DATA_QUALITY_TOOL])
+    tool, raw_plan = await _function_call(_agent_messages(state, "你是数据质量 Agent，只能调用 data_quality_check 检查当前上传文件。"), [DATA_QUALITY_TOOL])
+    try:
+        plan = EmptyToolPlan.model_validate(raw_plan).model_dump()
+    except Exception as exc:
+        raise RuntimeError("Quality Agent 返回了无效的检查计划，请重试") from exc
     return {**state, "tool": tool, "plan": plan}
 
 
 async def publishing_agent(state: MultiAgentState) -> MultiAgentState:
-    tool, plan = await _function_call(_agent_messages(state, "你是发布 Agent，只能调用 feishu_publish_preview 准备上一条已校验回答的发布预览，不得声称已经发送。"), [FEISHU_PREVIEW_TOOL])
+    tool, raw_plan = await _function_call(_agent_messages(state, "你是发布 Agent，只能调用 feishu_publish_preview 准备上一条已校验回答的发布预览，不得声称已经发送。"), [FEISHU_PREVIEW_TOOL])
+    try:
+        plan = EmptyToolPlan.model_validate(raw_plan).model_dump()
+    except Exception as exc:
+        raise RuntimeError("Publishing Agent 返回了无效的发布计划，请重试") from exc
     return {**state, "tool": tool, "plan": plan}
 
 

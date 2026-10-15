@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, MULTI_AGENT_GRAPH, PLANNER_TOOLS, SpreadsheetPlan
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, SpreadsheetPlan
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -83,3 +83,27 @@ def test_spreadsheet_plan_rejects_invalid_query_contract(field, value):
     payload[field] = value
     with pytest.raises(ValidationError):
         SpreadsheetPlan.model_validate(payload)
+
+
+def test_knowledge_plan_requires_a_bounded_query():
+    assert KnowledgePlan.model_validate({"query": "CRM导出字段"}).query == "CRM导出字段"
+    with pytest.raises(ValidationError):
+        KnowledgePlan.model_validate({"query": ""})
+    with pytest.raises(ValidationError):
+        KnowledgePlan.model_validate({"query": "x" * 501})
+
+
+def test_no_argument_tools_reject_model_invented_parameters():
+    assert EmptyToolPlan.model_validate({}).model_dump() == {}
+    with pytest.raises(ValidationError):
+        EmptyToolPlan.model_validate({"recipient": "someone@example.com"})
+
+
+def test_all_agent_contracts_reject_unknown_fields():
+    with pytest.raises(ValidationError):
+        AgentDecision.model_validate({"agent": "data_agent", "reason": "extra"})
+    with pytest.raises(ValidationError):
+        SpreadsheetPlan.model_validate({
+            "filters": {}, "group_by": "station_erp", "metric": "visit_count",
+            "order": "desc", "limit": 5, "sql": "select * from visits",
+        })
