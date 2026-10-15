@@ -150,17 +150,23 @@ KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","de
 
 SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
+DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","description":"检查当前上传 Excel 的必需字段、空值、日期范围和可分析记录数。用户问文件是否完整、字段是否缺失、为什么无法分析时使用。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
+
+FEISHU_PREVIEW_TOOL = {"type":"function","function":{"name":"feishu_publish_preview","description":"为最近一次回答生成飞书发布预览。用户明确说发送、推送、发到飞书时使用；此工具只准备内容，页面仍需用户确认。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
+
+PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL]
+
 @app.post("/api/plan")
 async def plan_query(payload: PlanRequest) -> JSONResponse:
     if not API_KEY:
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
     state = sessions.setdefault(payload.session_id, {"history": []})
     recent = state.get("history", [])[-4:]
-    system = SYSTEM + "你负责把用户自然语言转换为 spreadsheet_query。必须使用提供的省区、问题类型和日期范围；不得把‘虚假’或‘违规’擅自映射成某个具体问题类型。在本应用中，用户口语里的‘虚假次数’默认指当前上传文件中 CRM 已识别质检问题的拜访记录次数，此时 issue_type=null。用户问前几名但未说排名对象时，默认 group_by=station_erp。结合最近对话理解‘这个、刚才、啥意思’等追问。只调用一次工具。"
+    system = SYSTEM + "你负责根据用户意图从四个工具中选择且只调用一个：数据统计用 spreadsheet_query；规则、口径和导出说明用 knowledge_retrieval；文件字段、空值和可分析性检查用 data_quality_check；用户明确要求发送或推送飞书时用 feishu_publish_preview。数据查询必须使用提供的省区、问题类型和日期范围；不得把‘虚假’或‘违规’擅自映射成某个具体问题类型。在本应用中，用户口语里的‘虚假次数’默认指当前上传文件中 CRM 已识别质检问题的拜访记录次数，此时 issue_type=null。用户问前几名但未说排名对象时，默认 group_by=station_erp。结合最近对话理解‘这个、刚才、啥意思’等追问。"
     messages = [{"role":"system","content":system},{"role":"user","content":f"最近对话：{json.dumps(recent,ensure_ascii=False)}\n可用数据结构：{json.dumps(payload.schema_context,ensure_ascii=False)}\n用户问题：{payload.question}"}]
     try:
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":[SPREADSHEET_QUERY_TOOL],"tool_choice":{"type":"function","function":{"name":"spreadsheet_query"}},"thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":PLANNER_TOOLS,"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
     except httpx.HTTPError:
         logger.exception("plan_model_request_failed")
         return JSONResponse({"error":"模型服务暂时不可用，请稍后重试"}, status_code=502)
@@ -172,22 +178,40 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     except (ValueError, TypeError, KeyError, IndexError):
         logger.exception("plan_model_response_invalid")
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
+    tool_name = call.get("function",{}).get("name","")
+    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+        return JSONResponse({"error":"模型选择了未开放的工具"}, status_code=422)
     try: plan = json.loads(call.get("function",{}).get("arguments") or "{}")
     except json.JSONDecodeError: plan = {}
-    filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
-    issue_type = filters.get("issue_type")
-    if issue_type and str(issue_type) not in payload.question:
-        filters["issue_type"] = None
-    plan["filters"] = filters
-    return JSONResponse({"tool":"spreadsheet_query","plan":plan})
+    if tool_name == "spreadsheet_query":
+        filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
+        issue_type = filters.get("issue_type")
+        if issue_type and str(issue_type) not in payload.question:
+            filters["issue_type"] = None
+        plan["filters"] = filters
+    return JSONResponse({"tool":tool_name,"plan":plan})
 
 @app.post("/api/answer")
 async def answer_query(payload: AnswerRequest) -> JSONResponse:
     result = payload.tool_result
-    if result.get("tool") != "spreadsheet_query" or not isinstance(result.get("rows"), list):
+    tool_name = str(result.get("tool") or "")
+    if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
         return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
+    if tool_name == "data_quality_check" and not isinstance(result.get("required_fields"), list):
+        return JSONResponse({"error":"数据质量检查结果校验失败"}, status_code=422)
+    if tool_name == "knowledge_retrieval":
+        query = str(payload.plan.get("query") or payload.question)
+        docs = retrieve(query)
+        result = {"tool":"knowledge_retrieval","query":query,"sources":[{"source":item["source"],"text":item["text"][:1800]} for item in docs]}
+    if tool_name == "feishu_publish_preview":
+        content = str(result.get("content") or "").strip()
+        if not content:
+            return JSONResponse({"error":"当前没有可推送的上一条回答"}, status_code=422)
+        result = {"tool":"feishu_publish_preview","content":content,"configured":bool(result.get("configured")),"requires_confirmation":True}
+    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+        return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
-    answer_system = SYSTEM + "当前上传文件本身就是 CRM 质检问题数据。若查询计划 issue_type 为空，表示统计全部 CRM 已识别质检问题记录；直接按用户口语称为‘疑似虚假拜访记录’或‘CRM 已识别问题记录’，不要说缺少虚假数据，不要要求用户再指定问题类型，不要质疑工具结果。只解释本次过滤范围、排名和统计口径。"
+    answer_system = SYSTEM + "根据已选择工具的结果回答。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。"
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":state.get("history",[])[-3:]}
     try:
         async with httpx.AsyncClient(timeout=45) as client:
@@ -202,8 +226,9 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     except (ValueError, TypeError, KeyError, IndexError):
         logger.exception("answer_model_response_invalid")
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
-    state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":result.get("rows",[])[:10],"answer":answer}])[-6:]
-    return JSONResponse({"answer":answer,"tool":"spreadsheet_query","tool_result":result,"validation":{"valid":True}})
+    history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
+    state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
+    return JSONResponse({"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
 
 async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]], tool_result: dict[str, Any] | None = None) -> tuple[str, list[str]]:
