@@ -1,4 +1,7 @@
-from assistant.backend.main import MULTI_AGENT_GRAPH, PLANNER_TOOLS
+import pytest
+from pydantic import ValidationError
+
+from assistant.backend.main import AgentDecision, MULTI_AGENT_GRAPH, PLANNER_TOOLS
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -37,3 +40,14 @@ def test_langgraph_contains_supervisor_and_specialist_agents():
         "quality_agent",
         "publishing_agent",
     } <= nodes
+
+
+def test_supervisor_decision_accepts_only_registered_agents():
+    assert AgentDecision.model_validate({"agent": "data_agent"}).agent == "data_agent"
+    with pytest.raises(ValidationError):
+        AgentDecision.model_validate({"agent": "unknown_agent"})
+
+
+def test_supervisor_decision_requires_agent_field():
+    with pytest.raises(ValidationError):
+        AgentDecision.model_validate({})

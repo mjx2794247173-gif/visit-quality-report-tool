@@ -13,7 +13,7 @@ import time
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import httpx
 from dotenv import load_dotenv
@@ -64,6 +64,12 @@ class FeishuSendRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     confirmed: bool = False
     session_id: str = Field(default="browser-session", max_length=100)
+
+
+class AgentDecision(BaseModel):
+    """Validated output contract for the LangGraph supervisor."""
+
+    agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent"]
 
 
 def chunks(text: str) -> list[dict[str, str]]:
@@ -197,10 +203,11 @@ async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
         {"role":"user","content":f"最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
     _, arguments = await _function_call(messages, [DELEGATE_AGENT_TOOL])
-    agent = str(arguments.get("agent") or "")
-    if agent not in {"data_agent", "knowledge_agent", "quality_agent", "publishing_agent"}:
-        raise RuntimeError("Supervisor 未能选择有效的专业 Agent")
-    return {**state, "agent": agent}
+    try:
+        decision = AgentDecision.model_validate(arguments)
+    except Exception as exc:
+        raise RuntimeError("Supervisor 返回了无效的 Agent 决策，请重试") from exc
+    return {**state, "agent": decision.agent}
 
 
 def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, Any]]:
