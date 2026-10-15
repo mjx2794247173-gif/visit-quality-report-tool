@@ -72,6 +72,30 @@ class AgentDecision(BaseModel):
     agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent"]
 
 
+class SpreadsheetFilters(BaseModel):
+    province: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    station_erp: str | None = None
+    issue_type: str | None = None
+
+
+class SpreadsheetPlan(BaseModel):
+    """Validated query contract produced by the data specialist Agent."""
+
+    filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
+    group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"]
+    metric: Literal[
+        "visit_count",
+        "distinct_visit_count",
+        "distinct_issue_type_count",
+        "distinct_date_count",
+        "distinct_customer_count",
+    ]
+    order: Literal["desc", "asc"]
+    limit: int = Field(ge=1, le=50)
+
+
 def chunks(text: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     for file in sorted(KNOWLEDGE.glob("*.md")):
@@ -219,9 +243,14 @@ def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, 
 
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
-    tool, plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
-    filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
-    issue_type = filters.get("issue_type")
+    tool, raw_plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
+    try:
+        query_plan = SpreadsheetPlan.model_validate(raw_plan)
+    except Exception as exc:
+        raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试") from exc
+    plan = query_plan.model_dump()
+    filters = plan["filters"]
+    issue_type = filters["issue_type"]
     if issue_type and str(issue_type) not in state["question"]:
         filters["issue_type"] = None
     plan["filters"] = filters

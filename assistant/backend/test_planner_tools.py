@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, MULTI_AGENT_GRAPH, PLANNER_TOOLS
+from assistant.backend.main import AgentDecision, MULTI_AGENT_GRAPH, PLANNER_TOOLS, SpreadsheetPlan
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -51,3 +51,35 @@ def test_supervisor_decision_accepts_only_registered_agents():
 def test_supervisor_decision_requires_agent_field():
     with pytest.raises(ValidationError):
         AgentDecision.model_validate({})
+
+
+def test_spreadsheet_plan_normalizes_optional_filters():
+    plan = SpreadsheetPlan.model_validate({
+        "filters": {"province": "广东省区"},
+        "group_by": "station_erp",
+        "metric": "visit_count",
+        "order": "desc",
+        "limit": 5,
+    })
+    assert plan.filters.province == "广东省区"
+    assert plan.filters.issue_type is None
+
+
+@pytest.mark.parametrize("field,value", [
+    ("group_by", "unknown_group"),
+    ("metric", "model_guess"),
+    ("order", "random"),
+    ("limit", 0),
+    ("limit", 51),
+])
+def test_spreadsheet_plan_rejects_invalid_query_contract(field, value):
+    payload = {
+        "filters": {},
+        "group_by": "station_erp",
+        "metric": "visit_count",
+        "order": "desc",
+        "limit": 5,
+    }
+    payload[field] = value
+    with pytest.raises(ValidationError):
+        SpreadsheetPlan.model_validate(payload)
