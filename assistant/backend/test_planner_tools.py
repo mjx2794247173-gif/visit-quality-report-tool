@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRewrite, SpreadsheetPlan, assess_retrieval_sufficiency, merge_retrieval_sources, reciprocal_rank_fusion
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, merge_retrieval_sources, reciprocal_rank_fusion
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -163,6 +163,32 @@ def test_hybrid_fusion_deduplicates_and_obeys_limit():
     duplicate = {"source": "same.md", "text": "同一段"}
     result = reciprocal_rank_fusion([[duplicate], [duplicate]], limit=1)
     assert result == [duplicate]
+
+
+def test_source_ranking_can_only_reorder_existing_evidence():
+    sources = [
+        {"source": "a.md", "text": "A"},
+        {"source": "b.md", "text": "B"},
+        {"source": "c.md", "text": "C"},
+    ]
+    ranking = RetrievalRanking.model_validate({"ranked_indices": [2, 0, 1]})
+    assert apply_source_ranking(sources, ranking) == [sources[2], sources[0], sources[1]]
+
+
+@pytest.mark.parametrize("indices", [[0, 0, 1], [0, 1], [0, 1, 3]])
+def test_source_ranking_rejects_duplicates_missing_or_unknown_indices(indices):
+    sources = [
+        {"source": "a.md", "text": "A"},
+        {"source": "b.md", "text": "B"},
+        {"source": "c.md", "text": "C"},
+    ]
+    with pytest.raises(ValueError):
+        apply_source_ranking(sources, RetrievalRanking.model_validate({"ranked_indices": indices}))
+
+
+def test_source_ranking_rejects_extra_model_output():
+    with pytest.raises(ValidationError):
+        RetrievalRanking.model_validate({"ranked_indices": [0], "answer": "额外答案"})
 
 
 def test_no_argument_tools_reject_model_invented_parameters():
