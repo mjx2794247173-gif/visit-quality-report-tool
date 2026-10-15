@@ -1,7 +1,9 @@
+import asyncio
+
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, SpreadsheetPlan
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, SpreadsheetPlan, assess_retrieval_sufficiency
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -91,6 +93,36 @@ def test_knowledge_plan_requires_a_bounded_query():
         KnowledgePlan.model_validate({"query": ""})
     with pytest.raises(ValidationError):
         KnowledgePlan.model_validate({"query": "x" * 501})
+
+
+def test_retrieval_assessment_requires_a_complete_bounded_decision():
+    decision = RetrievalAssessment.model_validate({
+        "is_sufficient": False,
+        "missing_information": "缺少评分公式",
+    })
+    assert decision.is_sufficient is False
+    with pytest.raises(ValidationError):
+        RetrievalAssessment.model_validate({"is_sufficient": True})
+    with pytest.raises(ValidationError):
+        RetrievalAssessment.model_validate({
+            "is_sufficient": False,
+            "missing_information": "x" * 501,
+        })
+
+
+def test_retrieval_assessment_rejects_model_invented_fields():
+    with pytest.raises(ValidationError):
+        RetrievalAssessment.model_validate({
+            "is_sufficient": True,
+            "missing_information": "",
+            "answer": "模型擅自生成的答案",
+        })
+
+
+def test_empty_retrieval_is_always_insufficient_without_calling_model():
+    decision = asyncio.run(assess_retrieval_sufficiency("未知制度是什么", []))
+    assert decision.is_sufficient is False
+    assert "未检索到" in decision.missing_information
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

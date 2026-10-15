@@ -107,6 +107,14 @@ class KnowledgePlan(BaseModel):
     query: str = Field(min_length=1, max_length=500)
 
 
+class RetrievalAssessment(BaseModel):
+    """Whether retrieved knowledge is enough to answer without guessing."""
+
+    model_config = ConfigDict(extra="forbid")
+    is_sufficient: bool
+    missing_information: str = Field(max_length=500)
+
+
 class EmptyToolPlan(BaseModel):
     """Contract for specialist tools that intentionally accept no arguments."""
 
@@ -196,6 +204,8 @@ SYSTEM = (
 
 KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","description":"检索评分规则、字段说明、CRM导出要求、统计口径、通报规则、FAQ和安全边界","parameters":{"type":"object","properties":{"query":{"type":"string","description":"需要检索的业务知识问题"}},"required":["query"],"additionalProperties":False}}}
 
+RETRIEVAL_ASSESSMENT_TOOL = {"type":"function","function":{"name":"submit_retrieval_assessment","description":"判断检索资料是否足以回答用户问题，不得使用模型自身知识补全。","parameters":{"type":"object","properties":{"is_sufficient":{"type":"boolean"},"missing_information":{"type":"string","description":"资料不足时说明缺少什么；资料充分时为空字符串","maxLength":500}},"required":["is_sufficient","missing_information"],"additionalProperties":False}}}
+
 SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
 DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","description":"检查当前上传 Excel 的必需字段、空值、日期范围和可分析记录数。用户问文件是否完整、字段是否缺失、为什么无法分析时使用。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
@@ -236,6 +246,25 @@ async def _function_call(messages: list[dict[str, Any]], tools: list[dict[str, A
     except (ValueError, TypeError, KeyError, IndexError) as exc:
         raise RuntimeError("模型返回的工具调用格式异常，请重试") from exc
     return name, arguments if isinstance(arguments, dict) else {}
+
+
+async def assess_retrieval_sufficiency(question: str, sources: list[dict[str, str]]) -> RetrievalAssessment:
+    """Conservatively verify that retrieved documents cover the requested answer."""
+    if not sources:
+        return RetrievalAssessment(is_sufficient=False, missing_information="知识库未检索到相关资料")
+    evidence = [
+        {"source": item.get("source", ""), "text": item.get("text", "")[:1800]}
+        for item in sources[:6]
+    ]
+    messages = [
+        {"role":"system","content":"你是知识检索结果审查员。只判断给定资料是否覆盖用户问题所需的关键信息，不回答问题，不使用模型自身知识。只要资料不能直接支持可靠答案，就判定为不足并简要说明缺少什么。必须调用 submit_retrieval_assessment。"},
+        {"role":"user","content":json.dumps({"question":question,"sources":evidence}, ensure_ascii=False)},
+    ]
+    _, raw_assessment = await _function_call(messages, [RETRIEVAL_ASSESSMENT_TOOL])
+    try:
+        return RetrievalAssessment.model_validate(raw_assessment)
+    except Exception as exc:
+        raise RuntimeError("知识资料充分性审查结果无效，请重试") from exc
 
 
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
@@ -346,7 +375,19 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     if tool_name == "knowledge_retrieval":
         query = str(payload.plan.get("query") or payload.question)
         docs = retrieve(query)
-        result = {"tool":"knowledge_retrieval","query":query,"sources":[{"source":item["source"],"text":item["text"][:1800]} for item in docs]}
+        sources = [{"source":item["source"],"text":item["text"][:1800]} for item in docs]
+        try:
+            assessment = await assess_retrieval_sufficiency(payload.question, sources)
+        except RuntimeError as exc:
+            return JSONResponse({"error":str(exc)}, status_code=502)
+        result = {"tool":"knowledge_retrieval","query":query,"sources":sources,"assessment":assessment.model_dump()}
+        if not assessment.is_sufficient:
+            detail = assessment.missing_information.strip() or "现有资料没有覆盖回答所需的关键信息"
+            separator = "" if detail.endswith(("。", "！", "？", ".", "!", "?")) else "。"
+            answer = f"当前知识库资料不足以可靠回答这个问题：{detail}{separator}为避免编造，我先不做推断。"
+            state = sessions.setdefault(payload.session_id, {"history": []})
+            state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
+            return JSONResponse({"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
         content = str(result.get("content") or "").strip()
         if not content:
