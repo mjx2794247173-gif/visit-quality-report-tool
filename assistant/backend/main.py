@@ -137,6 +137,18 @@ class RetrievalRanking(BaseModel):
     relevant_indices: list[int] = Field(max_length=10)
 
 
+class WorkingMemory(BaseModel):
+    """Sanitized rolling query state; never contains CRM rows or answer text."""
+
+    model_config = ConfigDict(extra="forbid")
+    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"] | None = None
+    filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
+    group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"] | None = None
+    metric: Literal["visit_count", "distinct_visit_count", "distinct_issue_type_count", "distinct_date_count", "distinct_customer_count"] | None = None
+    order: Literal["desc", "asc"] | None = None
+    limit: int | None = Field(default=None, ge=1, le=50)
+
+
 class EmptyToolPlan(BaseModel):
     """Contract for specialist tools that intentionally accept no arguments."""
 
@@ -275,6 +287,7 @@ class MultiAgentState(TypedDict, total=False):
     question: str
     schema_context: dict[str, Any]
     recent: list[dict[str, Any]]
+    working_memory: dict[str, Any]
     agent: str
     tool: str
     plan: dict[str, Any]
@@ -389,10 +402,28 @@ def merge_retrieval_sources(*source_groups: list[dict[str, str]], limit: int = 1
     return merged
 
 
+def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """Roll forward only allowlisted query conditions, never raw results or prose."""
+    memory = WorkingMemory.model_validate(existing or {})
+    if tool == "spreadsheet_query":
+        query_plan = SpreadsheetPlan.model_validate(plan)
+        memory = WorkingMemory(
+            last_tool="spreadsheet_query",
+            filters=query_plan.filters,
+            group_by=query_plan.group_by,
+            metric=query_plan.metric,
+            order=query_plan.order,
+            limit=query_plan.limit,
+        )
+    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+        memory.last_tool = tool
+    return memory.model_dump(exclude_none=True)
+
+
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
     messages = [
         {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent。必须调用 delegate_to_agent。"},
-        {"role":"user","content":f"最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
+        {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
     _, arguments = await _function_call(messages, [DELEGATE_AGENT_TOOL])
     try:
@@ -405,7 +436,7 @@ async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
 def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, Any]]:
     return [
         {"role":"system","content":SYSTEM + instruction},
-        {"role":"user","content":f"最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
+        {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
 
 
@@ -483,7 +514,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     state = sessions.setdefault(payload.session_id, {"history": []})
     recent = state.get("history", [])[-4:]
     try:
-        graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent})
+        graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent,"working_memory":state.get("working_memory",{})})
     except RuntimeError as exc:
         logger.exception("multi_agent_plan_failed")
         audit({"trace_id":trace_id,"action":"plan","ok":False,"error_type":type(exc).__name__,"elapsed_ms":round((time.perf_counter()-started)*1000)})
@@ -499,6 +530,11 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     tool_name = str(result.get("tool") or "")
     if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
         return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
+    if tool_name == "spreadsheet_query":
+        try:
+            SpreadsheetPlan.model_validate(payload.plan)
+        except Exception:
+            return JSONResponse({"error":"表格查询计划校验失败"}, status_code=422)
     if tool_name == "data_quality_check" and not isinstance(result.get("required_fields"), list):
         return JSONResponse({"error":"数据质量检查结果校验失败"}, status_code=422)
     if tool_name == "knowledge_retrieval":
@@ -531,6 +567,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             answer = f"当前知识库资料不足以可靠回答这个问题：{detail}{separator}为避免编造，我先不做推断。"
             state = sessions.setdefault(payload.session_id, {"history": []})
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
+            state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -561,6 +598,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
+    state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
@@ -681,7 +719,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist_trace", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sanitized_rolling_query_state", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")

@@ -4,7 +4,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -237,6 +237,34 @@ def test_answer_trace_id_must_be_anonymous_hex_identifier():
     assert AnswerRequest.model_validate({**payload, "trace_id":"a" * 32}).trace_id == "a" * 32
     with pytest.raises(ValidationError):
         AnswerRequest.model_validate({**payload, "trace_id":"customer-name"})
+
+
+def test_working_memory_keeps_only_validated_query_conditions():
+    memory = update_working_memory({}, "spreadsheet_query", {
+        "filters":{"province":"广东省区", "date_from":"2026-10-12"},
+        "group_by":"station_erp", "metric":"visit_count", "order":"desc", "limit":5,
+    })
+    assert memory["filters"]["province"] == "广东省区"
+    assert memory["filters"]["date_from"] == "2026-10-12"
+    assert memory["group_by"] == "station_erp"
+    assert "rows" not in memory
+    assert "answer" not in memory
+
+
+def test_non_data_turn_preserves_query_conditions_and_updates_last_tool():
+    existing = WorkingMemory(
+        last_tool="spreadsheet_query", filters={"province":"浙江省区"},
+        group_by="issue_type", metric="visit_count", order="desc", limit=10,
+    ).model_dump(exclude_none=True)
+    memory = update_working_memory(existing, "knowledge_retrieval", {"query":"统计口径"})
+    assert memory["last_tool"] == "knowledge_retrieval"
+    assert memory["filters"]["province"] == "浙江省区"
+    assert memory["group_by"] == "issue_type"
+
+
+def test_working_memory_rejects_unvalidated_fields():
+    with pytest.raises(ValidationError):
+        WorkingMemory.model_validate({"last_tool":"spreadsheet_query", "rows":[{"customer":"secret"}]})
 
 
 def test_no_argument_tools_reject_model_invented_parameters():
