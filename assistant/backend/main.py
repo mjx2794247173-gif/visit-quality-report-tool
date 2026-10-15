@@ -111,6 +111,21 @@ def audit(event: dict[str, Any]) -> None:
     except OSError:
         logger.warning("audit_log_unavailable")
 
+
+def upstream_error(response: httpx.Response, fallback: str) -> str:
+    """Return a safe message even when the model gateway responds with HTML/text."""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = payload.get("error")
+            if isinstance(detail, dict) and detail.get("message"):
+                return str(detail["message"])
+            if payload.get("detail"):
+                return str(payload["detail"])
+    except (ValueError, TypeError):
+        pass
+    return fallback
+
 def infer_province(question: str, context: str) -> str | None:
     """Fill an omitted province argument from explicit user text, never from model guess."""
     try:
@@ -143,11 +158,20 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     recent = state.get("history", [])[-4:]
     system = SYSTEM + "你负责把用户自然语言转换为 spreadsheet_query。必须使用提供的省区、问题类型和日期范围；不得把‘虚假’或‘违规’擅自映射成某个具体问题类型。在本应用中，用户口语里的‘虚假次数’默认指当前上传文件中 CRM 已识别质检问题的拜访记录次数，此时 issue_type=null。用户问前几名但未说排名对象时，默认 group_by=station_erp。结合最近对话理解‘这个、刚才、啥意思’等追问。只调用一次工具。"
     messages = [{"role":"system","content":system},{"role":"user","content":f"最近对话：{json.dumps(recent,ensure_ascii=False)}\n可用数据结构：{json.dumps(payload.schema_context,ensure_ascii=False)}\n用户问题：{payload.question}"}]
-    async with httpx.AsyncClient(timeout=45) as client:
-        response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":[SPREADSHEET_QUERY_TOOL],"tool_choice":{"type":"function","function":{"name":"spreadsheet_query"}},"thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":messages,"tools":[SPREADSHEET_QUERY_TOOL],"tool_choice":{"type":"function","function":{"name":"spreadsheet_query"}},"thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+    except httpx.HTTPError:
+        logger.exception("plan_model_request_failed")
+        return JSONResponse({"error":"模型服务暂时不可用，请稍后重试"}, status_code=502)
     if response.status_code >= 400:
-        raise RuntimeError(response.json().get("error",{}).get("message","查询计划生成失败"))
-    call = (response.json()["choices"][0]["message"].get("tool_calls") or [{}])[0]
+        return JSONResponse({"error":upstream_error(response, "查询计划生成失败，请稍后重试")}, status_code=502)
+    try:
+        model_payload = response.json()
+        call = (model_payload["choices"][0]["message"].get("tool_calls") or [{}])[0]
+    except (ValueError, TypeError, KeyError, IndexError):
+        logger.exception("plan_model_response_invalid")
+        return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
     try: plan = json.loads(call.get("function",{}).get("arguments") or "{}")
     except json.JSONDecodeError: plan = {}
     filters = plan.get("filters") if isinstance(plan.get("filters"), dict) else {}
@@ -165,11 +189,19 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state = sessions.setdefault(payload.session_id, {"history": []})
     answer_system = SYSTEM + "当前上传文件本身就是 CRM 质检问题数据。若查询计划 issue_type 为空，表示统计全部 CRM 已识别质检问题记录；直接按用户口语称为‘疑似虚假拜访记录’或‘CRM 已识别问题记录’，不要说缺少虚假数据，不要要求用户再指定问题类型，不要质疑工具结果。只解释本次过滤范围、排名和统计口径。"
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":state.get("history",[])[-3:]}
-    async with httpx.AsyncClient(timeout=45) as client:
-        response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
+    except httpx.HTTPError:
+        logger.exception("answer_model_request_failed")
+        return JSONResponse({"error":"模型服务暂时不可用，请稍后重试"}, status_code=502)
     if response.status_code >= 400:
-        raise RuntimeError(response.json().get("error",{}).get("message","回答生成失败"))
-    answer = response.json()["choices"][0]["message"].get("content","").replace("**","")
+        return JSONResponse({"error":upstream_error(response, "回答生成失败，请稍后重试")}, status_code=502)
+    try:
+        answer = response.json()["choices"][0]["message"].get("content","").replace("**","")
+    except (ValueError, TypeError, KeyError, IndexError):
+        logger.exception("answer_model_response_invalid")
+        return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":result.get("rows",[])[:10],"answer":answer}])[-6:]
     return JSONResponse({"answer":answer,"tool":"spreadsheet_query","tool_result":result,"validation":{"valid":True}})
 
