@@ -115,6 +115,13 @@ class RetrievalAssessment(BaseModel):
     missing_information: str = Field(max_length=500)
 
 
+class RetrievalRewrite(BaseModel):
+    """A single supplemental search query produced after insufficient retrieval."""
+
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=500)
+
+
 class EmptyToolPlan(BaseModel):
     """Contract for specialist tools that intentionally accept no arguments."""
 
@@ -206,6 +213,8 @@ KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","de
 
 RETRIEVAL_ASSESSMENT_TOOL = {"type":"function","function":{"name":"submit_retrieval_assessment","description":"判断检索资料是否足以回答用户问题，不得使用模型自身知识补全。","parameters":{"type":"object","properties":{"is_sufficient":{"type":"boolean"},"missing_information":{"type":"string","description":"资料不足时说明缺少什么；资料充分时为空字符串","maxLength":500}},"required":["is_sufficient","missing_information"],"additionalProperties":False}}}
 
+RETRIEVAL_REWRITE_TOOL = {"type":"function","function":{"name":"submit_rewritten_query","description":"根据用户原问题和缺失信息生成一次更适合知识库检索的查询，不回答问题。","parameters":{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":500}},"required":["query"],"additionalProperties":False}}}
+
 SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
 DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","description":"检查当前上传 Excel 的必需字段、空值、日期范围和可分析记录数。用户问文件是否完整、字段是否缺失、为什么无法分析时使用。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
@@ -265,6 +274,35 @@ async def assess_retrieval_sufficiency(question: str, sources: list[dict[str, st
         return RetrievalAssessment.model_validate(raw_assessment)
     except Exception as exc:
         raise RuntimeError("知识资料充分性审查结果无效，请重试") from exc
+
+
+async def rewrite_retrieval_query(question: str, original_query: str, missing_information: str) -> RetrievalRewrite:
+    """Rewrite one failed retrieval query without inventing facts or broadening intent."""
+    messages = [
+        {"role":"system","content":"你是知识检索查询改写员。根据用户原问题、第一次检索词和缺失信息，生成一个更适合检索业务知识库的中文查询。保留用户原意和限定条件，不回答问题，不增加用户未提及的事实。必须调用 submit_rewritten_query。"},
+        {"role":"user","content":json.dumps({"question":question,"original_query":original_query,"missing_information":missing_information}, ensure_ascii=False)},
+    ]
+    _, raw_rewrite = await _function_call(messages, [RETRIEVAL_REWRITE_TOOL])
+    try:
+        return RetrievalRewrite.model_validate(raw_rewrite)
+    except Exception as exc:
+        raise RuntimeError("知识检索词改写结果无效，请重试") from exc
+
+
+def merge_retrieval_sources(*source_groups: list[dict[str, str]], limit: int = 10) -> list[dict[str, str]]:
+    """Merge supplemental retrieval results while preserving order and removing duplicates."""
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group in source_groups:
+        for item in group:
+            normalized = {"source":str(item.get("source", "")), "text":str(item.get("text", ""))[:1800]}
+            key = (normalized["source"], normalized["text"])
+            if key not in seen:
+                seen.add(key)
+                merged.append(normalized)
+            if len(merged) >= limit:
+                return merged
+    return merged
 
 
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
@@ -375,12 +413,21 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     if tool_name == "knowledge_retrieval":
         query = str(payload.plan.get("query") or payload.question)
         docs = retrieve(query)
-        sources = [{"source":item["source"],"text":item["text"][:1800]} for item in docs]
+        sources = merge_retrieval_sources(docs)
+        rewritten_query = ""
+        retrieval_attempts = 1
         try:
             assessment = await assess_retrieval_sufficiency(payload.question, sources)
+            if not assessment.is_sufficient:
+                rewrite = await rewrite_retrieval_query(payload.question, query, assessment.missing_information)
+                rewritten_query = rewrite.query
+                supplemental_docs = retrieve(rewritten_query)
+                sources = merge_retrieval_sources(supplemental_docs, sources)
+                retrieval_attempts = 2
+                assessment = await assess_retrieval_sufficiency(payload.question, sources)
         except RuntimeError as exc:
             return JSONResponse({"error":str(exc)}, status_code=502)
-        result = {"tool":"knowledge_retrieval","query":query,"sources":sources,"assessment":assessment.model_dump()}
+        result = {"tool":"knowledge_retrieval","query":query,"rewritten_query":rewritten_query or None,"retrieval_attempts":retrieval_attempts,"sources":sources,"assessment":assessment.model_dump()}
         if not assessment.is_sufficient:
             detail = assessment.missing_information.strip() or "现有资料没有覆盖回答所需的关键信息"
             separator = "" if detail.endswith(("。", "！", "？", ".", "!", "?")) else "。"

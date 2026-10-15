@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, SpreadsheetPlan, assess_retrieval_sufficiency
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRewrite, SpreadsheetPlan, assess_retrieval_sufficiency, merge_retrieval_sources
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -123,6 +123,26 @@ def test_empty_retrieval_is_always_insufficient_without_calling_model():
     decision = asyncio.run(assess_retrieval_sufficiency("未知制度是什么", []))
     assert decision.is_sufficient is False
     assert "未检索到" in decision.missing_information
+
+
+def test_retrieval_rewrite_requires_one_bounded_query_only():
+    assert RetrievalRewrite.model_validate({"query": "重点站长评分公式"}).query == "重点站长评分公式"
+    with pytest.raises(ValidationError):
+        RetrievalRewrite.model_validate({"query": ""})
+    with pytest.raises(ValidationError):
+        RetrievalRewrite.model_validate({"query": "评分公式", "answer": "额外答案"})
+
+
+def test_supplemental_retrieval_merges_and_deduplicates_sources():
+    first = [{"source": "a.md", "text": "第一段"}]
+    second = [
+        {"source": "a.md", "text": "第一段"},
+        {"source": "b.md", "text": "第二段"},
+    ]
+    assert merge_retrieval_sources(first, second) == [
+        {"source": "a.md", "text": "第一段"},
+        {"source": "b.md", "text": "第二段"},
+    ]
 
 
 def test_no_argument_tools_reject_model_invented_parameters():
