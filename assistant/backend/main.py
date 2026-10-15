@@ -123,10 +123,11 @@ class RetrievalRewrite(BaseModel):
 
 
 class RetrievalRanking(BaseModel):
-    """A permutation of retrieved source indices, with no generated evidence."""
+    """A full ranking plus its directly relevant prefix, with no generated evidence."""
 
     model_config = ConfigDict(extra="forbid")
     ranked_indices: list[int] = Field(min_length=1, max_length=10)
+    relevant_indices: list[int] = Field(max_length=10)
 
 
 class EmptyToolPlan(BaseModel):
@@ -249,7 +250,7 @@ RETRIEVAL_ASSESSMENT_TOOL = {"type":"function","function":{"name":"submit_retrie
 
 RETRIEVAL_REWRITE_TOOL = {"type":"function","function":{"name":"submit_rewritten_query","description":"根据用户原问题和缺失信息生成一次更适合知识库检索的查询，不回答问题。","parameters":{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":500}},"required":["query"],"additionalProperties":False}}}
 
-RETRIEVAL_RANKING_TOOL = {"type":"function","function":{"name":"submit_source_ranking","description":"仅按与用户问题的相关性重排已有资料编号，不新增或删除资料，不回答问题。","parameters":{"type":"object","properties":{"ranked_indices":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"maxItems":10}},"required":["ranked_indices"],"additionalProperties":False}}}
+RETRIEVAL_RANKING_TOOL = {"type":"function","function":{"name":"submit_source_ranking","description":"按相关性重排全部已有资料编号，并标出与问题直接相关的排序前缀；不新增资料，不回答问题。","parameters":{"type":"object","properties":{"ranked_indices":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"maxItems":10},"relevant_indices":{"type":"array","items":{"type":"integer","minimum":0},"maxItems":10}},"required":["ranked_indices","relevant_indices"],"additionalProperties":False}}}
 
 SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
@@ -333,25 +334,35 @@ def apply_source_ranking(sources: list[dict[str, str]], ranking: RetrievalRankin
     return [sources[index] for index in ranking.ranked_indices]
 
 
-async def rerank_retrieval_sources(question: str, sources: list[dict[str, str]]) -> tuple[list[dict[str, str]], bool]:
-    """Model-rerank existing candidates, falling back to RRF order on any failure."""
+def filter_ranked_sources(sources: list[dict[str, str]], ranking: RetrievalRanking) -> list[dict[str, str]]:
+    """Keep only the model-declared relevant prefix after validating its provenance."""
+    apply_source_ranking(sources, ranking)
+    if ranking.relevant_indices != ranking.ranked_indices[:len(ranking.relevant_indices)]:
+        raise ValueError("相关资料编号必须是完整排序的连续前缀")
+    return [sources[index] for index in ranking.relevant_indices]
+
+
+async def rerank_retrieval_sources(question: str, sources: list[dict[str, str]]) -> tuple[list[dict[str, str]], bool, bool]:
+    """Rerank and filter candidates, falling back to the full RRF set on any failure."""
     if len(sources) < 2:
-        return sources, False
+        return sources, False, False
     candidates = [
         {"index":index, "source":item.get("source", ""), "text":item.get("text", "")[:1200]}
         for index, item in enumerate(sources)
     ]
     messages = [
-        {"role":"system","content":"你是知识片段相关性重排器。只根据用户问题调整给定编号的顺序，最相关的排最前。必须且只能返回全部已有编号，每个编号恰好一次；不得新增资料、删除资料或回答问题。必须调用 submit_source_ranking。"},
+        {"role":"system","content":"你是知识片段相关性重排与过滤器。ranked_indices 必须包含全部已有编号且每个恰好一次，最相关的排最前；relevant_indices 只能是 ranked_indices 从第一个开始的连续前缀，只保留能直接帮助回答当前问题的片段，允许为空。不得新增资料、改写资料或回答问题。必须调用 submit_source_ranking。"},
         {"role":"user","content":json.dumps({"question":question,"candidates":candidates}, ensure_ascii=False)},
     ]
     try:
         _, raw_ranking = await _function_call(messages, [RETRIEVAL_RANKING_TOOL])
         ranking = RetrievalRanking.model_validate(raw_ranking)
-        return apply_source_ranking(sources, ranking), True
+        ranked_sources = apply_source_ranking(sources, ranking)
+        filtered_sources = filter_ranked_sources(sources, ranking)
+        return filtered_sources, True, len(filtered_sources) < len(ranked_sources)
     except (RuntimeError, ValueError, TypeError) as exc:
         logger.warning("retrieval_rerank_fallback error=%s", type(exc).__name__)
-        return sources, False
+        return sources, False, False
 
 
 def merge_retrieval_sources(*source_groups: list[dict[str, str]], limit: int = 10) -> list[dict[str, str]]:
@@ -482,8 +493,9 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         rewritten_query = ""
         retrieval_attempts = 1
         rerank_applied = False
+        relevance_filter_applied = False
         try:
-            sources, rerank_applied = await rerank_retrieval_sources(payload.question, sources)
+            sources, rerank_applied, relevance_filter_applied = await rerank_retrieval_sources(payload.question, sources)
             assessment = await assess_retrieval_sufficiency(payload.question, sources)
             if not assessment.is_sufficient:
                 rewrite = await rewrite_retrieval_query(payload.question, query, assessment.missing_information)
@@ -491,12 +503,13 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
                 supplemental_docs = retrieve(rewritten_query)
                 sources = merge_retrieval_sources(supplemental_docs, sources)
                 retrieval_attempts = 2
-                sources, second_rerank_applied = await rerank_retrieval_sources(payload.question, sources)
+                sources, second_rerank_applied, second_filter_applied = await rerank_retrieval_sources(payload.question, sources)
                 rerank_applied = rerank_applied or second_rerank_applied
+                relevance_filter_applied = relevance_filter_applied or second_filter_applied
                 assessment = await assess_retrieval_sufficiency(payload.question, sources)
         except RuntimeError as exc:
             return JSONResponse({"error":str(exc)}, status_code=502)
-        result = {"tool":"knowledge_retrieval","query":query,"rewritten_query":rewritten_query or None,"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"sources":sources,"assessment":assessment.model_dump()}
+        result = {"tool":"knowledge_retrieval","query":query,"rewritten_query":rewritten_query or None,"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sources":sources,"assessment":assessment.model_dump()}
         if not assessment.is_sufficient:
             detail = assessment.missing_information.strip() or "现有资料没有覆盖回答所需的关键信息"
             separator = "" if detail.endswith(("。", "！", "？", ".", "!", "?")) else "。"
@@ -648,7 +661,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
