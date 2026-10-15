@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRewrite, SpreadsheetPlan, assess_retrieval_sufficiency, merge_retrieval_sources
+from assistant.backend.main import AgentDecision, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRewrite, SpreadsheetPlan, assess_retrieval_sufficiency, merge_retrieval_sources, reciprocal_rank_fusion
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -143,6 +143,26 @@ def test_supplemental_retrieval_merges_and_deduplicates_sources():
         {"source": "a.md", "text": "第一段"},
         {"source": "b.md", "text": "第二段"},
     ]
+
+
+def test_hybrid_fusion_rewards_documents_found_by_both_retrievers():
+    semantic = [
+        {"source": "semantic.md", "text": "只被语义召回"},
+        {"source": "shared.md", "text": "两边都召回"},
+    ]
+    lexical = [
+        {"source": "lexical.md", "text": "只被关键词召回"},
+        {"source": "shared.md", "text": "两边都召回"},
+    ]
+    result = reciprocal_rank_fusion([semantic, lexical], limit=3)
+    assert result[0] == {"source": "shared.md", "text": "两边都召回"}
+    assert {item["source"] for item in result} == {"semantic.md", "lexical.md", "shared.md"}
+
+
+def test_hybrid_fusion_deduplicates_and_obeys_limit():
+    duplicate = {"source": "same.md", "text": "同一段"}
+    result = reciprocal_rank_fusion([[duplicate], [duplicate]], limit=1)
+    assert result == [duplicate]
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

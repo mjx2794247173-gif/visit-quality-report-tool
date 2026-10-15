@@ -137,9 +137,41 @@ def chunks(text: str) -> list[dict[str, str]]:
     return result
 
 
+def keyword_retrieve(question: str, limit: int = 12) -> list[dict[str, str]]:
+    """Return deterministic lexical candidates from the stable knowledge files."""
+    terms = re.findall(r"[\u4e00-\u9fff]{2}|[a-zA-Z0-9_]{2,}", question.lower())
+    scored: list[tuple[int, dict[str, str]]] = []
+    for item in chunks(question):
+        score = sum(item["text"].lower().count(term) for term in set(terms))
+        if score:
+            scored.append((score, item))
+    return [item for _, item in sorted(scored, key=lambda pair: pair[0], reverse=True)[:limit]]
+
+
+def reciprocal_rank_fusion(rankings: list[list[dict[str, str]]], limit: int = 6, rank_constant: int = 60) -> list[dict[str, str]]:
+    """Fuse vector and lexical rankings without comparing incompatible raw scores."""
+    scores: dict[tuple[str, str], float] = {}
+    documents: dict[tuple[str, str], dict[str, str]] = {}
+    first_seen: dict[tuple[str, str], int] = {}
+    sequence = 0
+    for ranking in rankings:
+        for rank, item in enumerate(ranking, start=1):
+            normalized = {"source":str(item.get("source", "")), "text":str(item.get("text", ""))}
+            key = (normalized["source"], normalized["text"])
+            if key not in first_seen:
+                first_seen[key] = sequence
+                sequence += 1
+            documents[key] = normalized
+            scores[key] = scores.get(key, 0.0) + 1.0 / (rank_constant + rank)
+    ordered = sorted(scores, key=lambda key: (-scores[key], first_seen[key]))
+    return [documents[key] for key in ordered[:limit]]
+
+
 def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
-    """Use Chroma + Chinese embeddings when installed; otherwise keyword fallback."""
+    """Combine semantic and lexical candidates; degrade safely to lexical retrieval."""
     global _rag_collection, _rag_model
+    candidate_limit = max(limit * 2, 10)
+    vector_candidates: list[dict[str, str]] = []
     try:
         if os.getenv("RAG_BACKEND", "auto").lower() != "keyword":
             import chromadb
@@ -152,17 +184,12 @@ def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
                     docs = chunks(""); texts = [x["text"] for x in docs]
                     if texts: _rag_collection.add(ids=[f"doc-{i}" for i in range(len(texts))], documents=texts, metadatas=[{"source":x["source"]} for x in docs], embeddings=_rag_model.encode(texts, normalize_embeddings=True).tolist())
             if _rag_collection.count():
-                result = _rag_collection.query(query_embeddings=_rag_model.encode([question], normalize_embeddings=True).tolist(), n_results=min(limit, _rag_collection.count()))
-                return [{"source":m.get("source","") if m else "", "text":t} for t,m in zip(result.get("documents",[[]])[0], result.get("metadatas",[[]])[0])]
+                result = _rag_collection.query(query_embeddings=_rag_model.encode([question], normalize_embeddings=True).tolist(), n_results=min(candidate_limit, _rag_collection.count()))
+                vector_candidates = [{"source":m.get("source","") if m else "", "text":t} for t,m in zip(result.get("documents",[[]])[0], result.get("metadatas",[[]])[0])]
     except Exception as exc:
         logger.warning("rag_vector_fallback error=%s", type(exc).__name__)
-    terms = re.findall(r"[\u4e00-\u9fff]{2}|[a-zA-Z0-9_]{2,}", question.lower())
-    scored = []
-    for item in chunks(question):
-        score = sum(item["text"].lower().count(term) for term in set(terms))
-        if score:
-            scored.append((score, item))
-    return [item for _, item in sorted(scored, key=lambda pair: pair[0], reverse=True)[:limit]]
+    keyword_candidates = keyword_retrieve(question, candidate_limit)
+    return reciprocal_rank_fusion([vector_candidates, keyword_candidates], limit=limit)
 
 
 def audit(event: dict[str, Any]) -> None:
@@ -579,7 +606,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
