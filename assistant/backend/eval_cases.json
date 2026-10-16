@@ -1,0 +1,76 @@
+[
+  {
+    "id": "data_province_date_top5",
+    "question": "10月12日广东省区问题最多的前五名站长是谁？",
+    "expected_agent": "data_agent",
+    "expected_tool": "spreadsheet_query",
+    "expected_plan_subset": {
+      "filters": {"province": "广东省区", "date_from": "2026-10-12", "date_to": "2026-10-12", "issue_type": null},
+      "group_by": "station_erp",
+      "metric": "visit_count",
+      "order": "desc",
+      "limit": 5
+    }
+  },
+  {
+    "id": "data_generic_false_visit",
+    "question": "10/09全国虚假次数前五",
+    "expected_agent": "data_agent",
+    "expected_tool": "spreadsheet_query",
+    "expected_plan_subset": {
+      "filters": {"date_from": "2026-10-09", "date_to": "2026-10-09", "issue_type": null},
+      "group_by": "station_erp",
+      "metric": "visit_count",
+      "order": "desc",
+      "limit": 5
+    }
+  },
+  {
+    "id": "data_exact_issue",
+    "question": "10月11日浙江省区录入内容重复最多的是哪个站长？",
+    "expected_agent": "data_agent",
+    "expected_tool": "spreadsheet_query",
+    "expected_plan_subset": {
+      "filters": {"province": "浙江省区", "date_from": "2026-10-11", "date_to": "2026-10-11", "issue_type": "录入内容重复"},
+      "group_by": "station_erp",
+      "metric": "visit_count",
+      "order": "desc",
+      "limit": 1
+    }
+  },
+  {
+    "id": "data_station_issue_count",
+    "question": "liheng105在10月12日犯了几次录入内容重复？",
+    "expected_agent": "data_agent",
+    "expected_tool": "spreadsheet_query",
+    "expected_plan_subset": {
+      "filters": {"station_erp": "liheng105", "date_from": "2026-10-12", "date_to": "2026-10-12", "issue_type": "录入内容重复"},
+      "group_by": "none",
+      "metric": "visit_count"
+    }
+  },
+  {
+    "id": "knowledge_scoring_rule",
+    "question": "虚假拜访在通报里怎么扣分？",
+    "expected_agent": "knowledge_agent",
+    "expected_tool": "knowledge_retrieval"
+  },
+  {
+    "id": "knowledge_export_fields",
+    "question": "CRM要导出哪些字段才能分析？",
+    "expected_agent": "knowledge_agent",
+    "expected_tool": "knowledge_retrieval"
+  },
+  {
+    "id": "quality_missing_fields",
+    "question": "为什么我上传的文件不能分析，帮我检查是不是缺字段",
+    "expected_agent": "quality_agent",
+    "expected_tool": "data_quality_check"
+  },
+  {
+    "id": "publishing_preview",
+    "question": "把上一条分析结果推送到飞书",
+    "expected_agent": "publishing_agent",
+    "expected_tool": "feishu_publish_preview"
+  }
+]
