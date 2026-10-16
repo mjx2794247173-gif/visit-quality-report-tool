@@ -7,8 +7,10 @@ retrieval and DeepSeek.  It never decides whether a visit is fraudulent.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
+import sqlite3
 import time
 import logging
 import uuid
@@ -39,6 +41,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 sessions: dict[str, dict[str, Any]] = {}
 logger = logging.getLogger("visit_quality_assistant")
 AUDIT_LOG = ROOT / "server" / "assistant_calls.jsonl"
+MEMORY_DB = ROOT / "server" / "session_memory.sqlite3"
+MEMORY_TTL_SECONDS = 7 * 24 * 60 * 60
 AUDIT_ALLOWED_FIELDS = {
     "action", "ok", "agent", "tool", "route", "validated", "source_count",
     "retrieval_attempts", "rerank_applied", "relevance_filter_applied",
@@ -57,13 +61,13 @@ class ChatRequest(BaseModel):
 class PlanRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     schema_context: dict[str, Any] = Field(default_factory=dict)
-    session_id: str = Field(default="browser-session", max_length=100)
+    session_id: str = Field(pattern=r"^[a-f0-9]{32}$")
 
 class AnswerRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     plan: dict[str, Any]
     tool_result: dict[str, Any]
-    session_id: str = Field(default="browser-session", max_length=100)
+    session_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     trace_id: str = Field(default="", pattern=r"^[a-f0-9]{32}$")
 
 
@@ -420,6 +424,52 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
     return memory.model_dump(exclude_none=True)
 
 
+def _session_memory_key(session_id: str) -> str:
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
+
+
+def _persistent_memory(memory: dict[str, Any]) -> dict[str, Any]:
+    """Remove employee identifiers before writing the query state to disk."""
+    validated = WorkingMemory.model_validate(memory)
+    validated.filters.station_erp = None
+    return validated.model_dump(exclude_none=True)
+
+
+def save_working_memory(session_id: str, memory: dict[str, Any]) -> None:
+    """Persist only sanitized query state under a hashed, expiring session key."""
+    safe_memory = _persistent_memory(memory)
+    now = int(time.time())
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS session_memory (session_key TEXT PRIMARY KEY, memory_json TEXT NOT NULL, updated_at INTEGER NOT NULL)")
+            connection.execute("DELETE FROM session_memory WHERE updated_at < ?", (now - MEMORY_TTL_SECONDS,))
+            connection.execute(
+                "INSERT INTO session_memory(session_key, memory_json, updated_at) VALUES(?, ?, ?) ON CONFLICT(session_key) DO UPDATE SET memory_json=excluded.memory_json, updated_at=excluded.updated_at",
+                (_session_memory_key(session_id), json.dumps(safe_memory, ensure_ascii=False), now),
+            )
+    except sqlite3.Error:
+        logger.warning("session_memory_save_failed")
+
+
+def load_working_memory(session_id: str) -> dict[str, Any]:
+    """Load and revalidate unexpired sanitized query state."""
+    if not MEMORY_DB.exists():
+        return {}
+    cutoff = int(time.time()) - MEMORY_TTL_SECONDS
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            row = connection.execute(
+                "SELECT memory_json FROM session_memory WHERE session_key = ? AND updated_at >= ?",
+                (_session_memory_key(session_id), cutoff),
+            ).fetchone()
+        if not row:
+            return {}
+        return WorkingMemory.model_validate(json.loads(row[0])).model_dump(exclude_none=True)
+    except (sqlite3.Error, ValueError, TypeError):
+        logger.warning("session_memory_load_failed")
+        return {}
+
+
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
     messages = [
         {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent。必须调用 delegate_to_agent。"},
@@ -512,6 +562,8 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
         audit({"trace_id":trace_id,"action":"plan","ok":False,"status":"model_not_configured","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
     state = sessions.setdefault(payload.session_id, {"history": []})
+    if "working_memory" not in state:
+        state["working_memory"] = load_working_memory(payload.session_id)
     recent = state.get("history", [])[-4:]
     try:
         graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent,"working_memory":state.get("working_memory",{})})
@@ -568,6 +620,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state = sessions.setdefault(payload.session_id, {"history": []})
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
+            save_working_memory(payload.session_id, state["working_memory"])
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -599,6 +652,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
+    save_working_memory(payload.session_id, state["working_memory"])
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
@@ -719,7 +773,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sanitized_rolling_query_state", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")

@@ -1,10 +1,11 @@
 import asyncio
 import json
+import sqlite3
 
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, merge_retrieval_sources, reciprocal_rank_fusion, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -233,7 +234,7 @@ def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
 
 
 def test_answer_trace_id_must_be_anonymous_hex_identifier():
-    payload = {"question":"测试", "plan":{}, "tool_result":{"tool":"data_quality_check"}}
+    payload = {"question":"测试", "plan":{}, "tool_result":{"tool":"data_quality_check"}, "session_id":"b" * 32}
     assert AnswerRequest.model_validate({**payload, "trace_id":"a" * 32}).trace_id == "a" * 32
     with pytest.raises(ValidationError):
         AnswerRequest.model_validate({**payload, "trace_id":"customer-name"})
@@ -265,6 +266,31 @@ def test_non_data_turn_preserves_query_conditions_and_updates_last_tool():
 def test_working_memory_rejects_unvalidated_fields():
     with pytest.raises(ValidationError):
         WorkingMemory.model_validate({"last_tool":"spreadsheet_query", "rows":[{"customer":"secret"}]})
+
+
+def test_persisted_memory_hashes_session_and_removes_erp(tmp_path, monkeypatch):
+    database = tmp_path / "memory.sqlite3"
+    monkeypatch.setattr("assistant.backend.main.MEMORY_DB", database)
+    memory = update_working_memory({}, "spreadsheet_query", {
+        "filters":{"province":"广东省区", "station_erp":"employee123"},
+        "group_by":"station_erp", "metric":"visit_count", "order":"desc", "limit":5,
+    })
+    save_working_memory("visible-browser-session", memory)
+    loaded = load_working_memory("visible-browser-session")
+    assert loaded["filters"]["province"] == "广东省区"
+    assert loaded["filters"].get("station_erp") is None
+    raw = database.read_bytes()
+    assert b"visible-browser-session" not in raw
+    assert b"employee123" not in raw
+
+
+def test_expired_persisted_memory_is_not_restored(tmp_path, monkeypatch):
+    database = tmp_path / "memory.sqlite3"
+    monkeypatch.setattr("assistant.backend.main.MEMORY_DB", database)
+    save_working_memory("expired-session", WorkingMemory(last_tool="data_quality_check").model_dump(exclude_none=True))
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE session_memory SET updated_at = 0")
+    assert load_working_memory("expired-session") == {}
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

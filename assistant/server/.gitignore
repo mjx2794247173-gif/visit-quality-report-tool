@@ -1,2 +1,5 @@
 .env
 node_modules/
+session_memory.sqlite3
+session_memory.sqlite3-shm
+session_memory.sqlite3-wal
