@@ -1,11 +1,12 @@
 import asyncio
 import json
 import sqlite3
+import threading
 
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, retrieve, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, retrieve, retrieve_async, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -318,6 +319,15 @@ def test_retrieval_cache_expires_after_ttl(monkeypatch):
     retrieve("评分规则")
     assert calls == ["评分规则", "评分规则"]
     clear_retrieval_cache()
+
+
+def test_async_retrieval_runs_blocking_work_in_worker_thread(monkeypatch):
+    caller_thread = threading.get_ident()
+    worker_threads = []
+    monkeypatch.setattr("assistant.backend.main.retrieve", lambda question, limit: worker_threads.append(threading.get_ident()) or [{"source":"rules.md", "text":question}])
+    result = asyncio.run(retrieve_async("评分规则"))
+    assert result[0]["text"] == "评分规则"
+    assert worker_threads and worker_threads[0] != caller_thread
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

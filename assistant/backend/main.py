@@ -6,6 +6,7 @@ retrieval and DeepSeek.  It never decides whether a visit is fraudulent.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import hashlib
 import os
@@ -259,6 +260,11 @@ def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
     return result
 
 
+async def retrieve_async(question: str, limit: int = 6) -> list[dict[str, str]]:
+    """Run embedding and local retrieval work outside the FastAPI event loop."""
+    return await asyncio.to_thread(retrieve, question, limit)
+
+
 def audit(event: dict[str, Any]) -> None:
     """Write metadata only; never persist CRM rows, customer names, or context."""
     safe = {"time": datetime.now(timezone.utc).isoformat()}
@@ -506,6 +512,14 @@ def load_working_memory(session_id: str) -> dict[str, Any]:
         return {}
 
 
+async def load_working_memory_async(session_id: str) -> dict[str, Any]:
+    return await asyncio.to_thread(load_working_memory, session_id)
+
+
+async def save_working_memory_async(session_id: str, memory: dict[str, Any]) -> None:
+    await asyncio.to_thread(save_working_memory, session_id, memory)
+
+
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
     messages = [
         {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent。必须调用 delegate_to_agent。"},
@@ -599,7 +613,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
     state = sessions.setdefault(payload.session_id, {"history": []})
     if "working_memory" not in state:
-        state["working_memory"] = load_working_memory(payload.session_id)
+        state["working_memory"] = await load_working_memory_async(payload.session_id)
     recent = state.get("history", [])[-4:]
     try:
         graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent,"working_memory":state.get("working_memory",{})})
@@ -627,7 +641,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"数据质量检查结果校验失败"}, status_code=422)
     if tool_name == "knowledge_retrieval":
         query = str(payload.plan.get("query") or payload.question)
-        docs = retrieve(query)
+        docs = await retrieve_async(query)
         sources = merge_retrieval_sources(docs)
         rewritten_query = ""
         retrieval_attempts = 1
@@ -639,7 +653,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             if not assessment.is_sufficient:
                 rewrite = await rewrite_retrieval_query(payload.question, query, assessment.missing_information)
                 rewritten_query = rewrite.query
-                supplemental_docs = retrieve(rewritten_query)
+                supplemental_docs = await retrieve_async(rewritten_query)
                 sources = merge_retrieval_sources(supplemental_docs, sources)
                 retrieval_attempts = 2
                 sources, second_rerank_applied, second_filter_applied = await rerank_retrieval_sources(payload.question, sources)
@@ -656,7 +670,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state = sessions.setdefault(payload.session_id, {"history": []})
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
-            save_working_memory(payload.session_id, state["working_memory"])
+            await save_working_memory_async(payload.session_id, state["working_memory"])
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -688,7 +702,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
-    save_working_memory(payload.session_id, state["working_memory"])
+    await save_working_memory_async(payload.session_id, state["working_memory"])
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
@@ -776,7 +790,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
                     arguments["top_n"] = chinese_numbers[chinese_top.group(1)]
             if name == "knowledge_retrieval":
                 query = arguments.get("query") if isinstance(arguments, dict) else question
-                docs = retrieve(query or question)
+                docs = await retrieve_async(query or question)
                 result = {"tool":"knowledge_retrieval", "query":query or question, "sources":docs}
             else:
                 result = execute_tool(name, arguments if isinstance(arguments,dict) else {}, context)
@@ -809,7 +823,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "blocking_io":"thread_offload", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
@@ -870,7 +884,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             return
         context = attach_erp_lookup(payload.context, payload.erp_lookup)
         selected = choose_tool(payload.question, context)
-        knowledge = retrieve(payload.question) if selected["tool"] == "knowledge_retrieval" else []
+        knowledge = await retrieve_async(payload.question) if selected["tool"] == "knowledge_retrieval" else []
         yield f"data: {json.dumps({'type': 'status', 'text': '正在检索业务规则…' if knowledge else '正在整理分析结果…'}, ensure_ascii=False)}\n\n"
         try:
             if selected["tool"] in {"knowledge_retrieval", "fallback"}:
