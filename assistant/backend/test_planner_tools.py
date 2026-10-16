@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, apply_source_ranking, assess_retrieval_sufficiency, audit, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, retrieve, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -291,6 +291,33 @@ def test_expired_persisted_memory_is_not_restored(tmp_path, monkeypatch):
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE session_memory SET updated_at = 0")
     assert load_working_memory("expired-session") == {}
+
+
+def test_retrieval_cache_reuses_results_without_plaintext_query(monkeypatch):
+    clear_retrieval_cache()
+    calls = []
+    monkeypatch.setattr("assistant.backend.main._retrieve_uncached", lambda question, limit: calls.append((question, limit)) or [{"source":"rules.md", "text":"result"}])
+    first = retrieve("敏感查询原文", 6)
+    first[0]["text"] = "mutated"
+    second = retrieve("敏感查询原文", 6)
+    assert calls == [("敏感查询原文", 6)]
+    assert second[0]["text"] == "result"
+    assert all("敏感查询原文" not in key for key in _retrieval_cache)
+    clear_retrieval_cache()
+
+
+def test_retrieval_cache_expires_after_ttl(monkeypatch):
+    clear_retrieval_cache()
+    clock = {"now": 100.0}
+    calls = []
+    monkeypatch.setattr("assistant.backend.main.time.monotonic", lambda: clock["now"])
+    monkeypatch.setattr("assistant.backend.main.RETRIEVAL_CACHE_TTL_SECONDS", 10)
+    monkeypatch.setattr("assistant.backend.main._retrieve_uncached", lambda question, limit: calls.append(question) or [{"source":"rules.md", "text":question}])
+    retrieve("评分规则")
+    clock["now"] = 111.0
+    retrieve("评分规则")
+    assert calls == ["评分规则", "评分规则"]
+    clear_retrieval_cache()
 
 
 def test_no_argument_tools_reject_model_invented_parameters():

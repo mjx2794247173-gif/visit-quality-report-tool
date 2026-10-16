@@ -14,6 +14,7 @@ import sqlite3
 import time
 import logging
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -43,6 +44,8 @@ logger = logging.getLogger("visit_quality_assistant")
 AUDIT_LOG = ROOT / "server" / "assistant_calls.jsonl"
 MEMORY_DB = ROOT / "server" / "session_memory.sqlite3"
 MEMORY_TTL_SECONDS = 7 * 24 * 60 * 60
+RETRIEVAL_CACHE_TTL_SECONDS = 10 * 60
+RETRIEVAL_CACHE_MAX_ENTRIES = 128
 AUDIT_ALLOWED_FIELDS = {
     "action", "ok", "agent", "tool", "route", "validated", "source_count",
     "retrieval_attempts", "rerank_applied", "relevance_filter_applied",
@@ -50,6 +53,7 @@ AUDIT_ALLOWED_FIELDS = {
 }
 _rag_collection = None
 _rag_model = None
+_retrieval_cache: OrderedDict[str, tuple[float, list[dict[str, str]]]] = OrderedDict()
 
 
 class ChatRequest(BaseModel):
@@ -198,7 +202,7 @@ def reciprocal_rank_fusion(rankings: list[list[dict[str, str]]], limit: int = 6,
     return [documents[key] for key in ordered[:limit]]
 
 
-def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
+def _retrieve_uncached(question: str, limit: int = 6) -> list[dict[str, str]]:
     """Combine semantic and lexical candidates; degrade safely to lexical retrieval."""
     global _rag_collection, _rag_model
     candidate_limit = max(limit * 2, 10)
@@ -221,6 +225,38 @@ def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
         logger.warning("rag_vector_fallback error=%s", type(exc).__name__)
     keyword_candidates = keyword_retrieve(question, candidate_limit)
     return reciprocal_rank_fusion([vector_candidates, keyword_candidates], limit=limit)
+
+
+def _knowledge_version() -> str:
+    metadata = [f"{path.name}:{path.stat().st_mtime_ns}:{path.stat().st_size}" for path in sorted(KNOWLEDGE.glob("*.md"))]
+    return hashlib.sha256("|".join(metadata).encode("utf-8")).hexdigest()
+
+
+def _retrieval_cache_key(question: str, limit: int) -> str:
+    material = f"{os.getenv('RAG_BACKEND', 'auto')}|{_knowledge_version()}|{limit}|{question}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def clear_retrieval_cache() -> None:
+    _retrieval_cache.clear()
+
+
+def retrieve(question: str, limit: int = 6) -> list[dict[str, str]]:
+    """Return cached stable-knowledge retrieval results without retaining plaintext queries."""
+    now = time.monotonic()
+    cache_key = _retrieval_cache_key(question, limit)
+    cached = _retrieval_cache.get(cache_key)
+    if cached and now - cached[0] <= RETRIEVAL_CACHE_TTL_SECONDS:
+        _retrieval_cache.move_to_end(cache_key)
+        return [dict(item) for item in cached[1]]
+    if cached:
+        _retrieval_cache.pop(cache_key, None)
+    result = _retrieve_uncached(question, limit)
+    _retrieval_cache[cache_key] = (now, [dict(item) for item in result])
+    _retrieval_cache.move_to_end(cache_key)
+    while len(_retrieval_cache) > RETRIEVAL_CACHE_MAX_ENTRIES:
+        _retrieval_cache.popitem(last=False)
+    return result
 
 
 def audit(event: dict[str, Any]) -> None:
@@ -773,7 +809,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
