@@ -109,7 +109,7 @@ class O2JingMeAdapter:
         request: dict[str, Any] = {"content": build_jingme_message(analysis_result)}
         request["erp" if erp else "group_id"] = erp or group_id
         if at_erps:
-            request["at_erps"] = [str(value) for value in at_erps[:20]]
+            request["at_erps"] = [str(value) for value in at_erps[:20] if str(value).strip() and str(value).strip() != str(erp or "").strip()]
         robot_id = _setting("JINGME_DEFAULT_ROBOT_ID")
         if robot_id:
             request["robot_id"] = robot_id
