@@ -13,7 +13,11 @@ import shutil
 import subprocess
 from typing import Any, Protocol
 
-MAX_MESSAGE_CHARS = 4000
+# JingME's provider-side limit is effectively stricter for Chinese text than
+# Python's character count suggests. Keep a byte-safe budget for JSON/API
+# transport and leave room for provider-side framing.
+MAX_MESSAGE_CHARS = 600
+MAX_MESSAGE_BYTES = 1800
 
 
 class JingMeAdapter(Protocol):
@@ -65,21 +69,21 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
             lines.append(f"{key}：{value}")
     if isinstance(analysis_result.get("ranking"), list):
         lines.append("问题类型排名：")
-        for index, item in enumerate(analysis_result["ranking"][:10], 1):
+        for index, item in enumerate(analysis_result["ranking"][:5], 1):
             if isinstance(item, dict):
                 label = item.get("issue_type") or item.get("type") or item.get("name") or "未命名"
                 count = item.get("count", item.get("visits", item.get("value", 0)))
                 lines.append(f"{index}. {label}：{count}")
     if isinstance(analysis_result.get("stations"), list):
         lines.append("站长排名：")
-        for index, item in enumerate(analysis_result["stations"][:10], 1):
+        for index, item in enumerate(analysis_result["stations"][:5], 1):
             if isinstance(item, dict):
                 erp = item.get("erp", "匿名ERP")
                 visits = item.get("visits", item.get("count", 0))
                 lines.append(f"{index}. {erp}：{visits}")
     if isinstance(analysis_result.get("problem_type_ranking"), list):
         lines.append("问题类型排名：")
-        for index, item in enumerate(analysis_result["problem_type_ranking"][:10], 1):
+        for index, item in enumerate(analysis_result["problem_type_ranking"][:5], 1):
             if isinstance(item, dict):
                 label = item.get("issue_type") or item.get("type") or item.get("name") or "未命名"
                 count = item.get("count", item.get("visits", item.get("value", 0)))
@@ -87,8 +91,8 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
     if analysis_result.get("disclaimer"):
         lines.append(str(analysis_result["disclaimer"]))
     text = "\n".join(lines)
-    if len(text) > MAX_MESSAGE_CHARS:
-        raise ValueError(f"京ME通报不能超过 {MAX_MESSAGE_CHARS} 个字符")
+    if len(text) > MAX_MESSAGE_CHARS or len(text.encode("utf-8")) > MAX_MESSAGE_BYTES:
+        raise ValueError("京ME通报内容过长，请缩小统计范围后重试")
     return text
 
 
