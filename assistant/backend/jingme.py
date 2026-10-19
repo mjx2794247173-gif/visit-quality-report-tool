@@ -88,14 +88,10 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
                 label = item.get("issue_type") or item.get("type") or item.get("name") or "未命名"
                 count = item.get("count", item.get("visits", item.get("value", 0)))
                 lines.append(f"{index}. {str(label)[:60]}：{count}")
-    if analysis_result.get("disclaimer"):
-        lines.append(str(analysis_result["disclaimer"]))
     text = "\n".join(lines)
     if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
         return text
-    # The disclaimer is useful in the web answer, but is not required for a
-    # compact notification because the title and deterministic fields remain.
-    compact_lines = [line for line in lines if line != str(analysis_result.get("disclaimer", ""))]
+    compact_lines = lines
     text = "\n".join(compact_lines)
     if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
         return text
