@@ -153,7 +153,8 @@ def _run_o2(request: dict[str, Any], dry_run: bool) -> dict[str, Any]:
             direct_args.append("--dry-run")
         completed = subprocess.run(direct_args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45, check=False)
     if completed.returncode != 0:
-        raise RuntimeError("京ME CLI调用失败")
+        detail = _safe_cli_error(completed.stdout, completed.stderr)
+        raise RuntimeError(f"京ME CLI调用失败：{detail}")
     try:
         return json.loads(completed.stdout or "")
     except json.JSONDecodeError as exc:
@@ -169,6 +170,21 @@ def _run_o2(request: dict[str, Any], dry_run: bool) -> dict[str, Any]:
                 except json.JSONDecodeError:
                     pass
         raise RuntimeError("京ME CLI返回格式异常") from exc
+
+
+def _safe_cli_error(stdout: str | None, stderr: str | None) -> str:
+    """Expose only a bounded provider error, never command args or secrets."""
+    for raw in (stdout or "", stderr or ""):
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            code = str(error.get("code") or "JME_API_ERROR")[:80]
+            message = str(error.get("message") or "京ME业务调用失败")[:240]
+            return f"{code}：{message}"
+    return "请运行 jdme doctor --json 检查认证和权限"
 
 
 def get_jingme_adapter() -> JingMeAdapter:
