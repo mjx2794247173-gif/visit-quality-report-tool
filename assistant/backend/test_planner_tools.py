@@ -6,7 +6,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -301,6 +301,21 @@ def test_expired_persisted_memory_is_not_restored(tmp_path, monkeypatch):
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE session_memory SET updated_at = 0")
     assert load_working_memory("expired-session") == {}
+
+
+def test_pending_workflow_persists_only_binding_metadata(tmp_path, monkeypatch):
+    database = tmp_path / "memory.sqlite3"
+    monkeypatch.setattr("assistant.backend.main.MEMORY_DB", database)
+    save_pending_workflow("session-a", {
+        "workflow_id": "a" * 32,
+        "signature": "b" * 64,
+        "plan": {"filters": {"station_erp": "employee123"}},
+    })
+    loaded = load_pending_workflow("session-a")
+    assert loaded == {"workflow_id": "a" * 32, "signature": "b" * 64}
+    raw = database.read_bytes()
+    assert b"employee123" not in raw
+    assert b"plan" not in raw
 
 
 def test_retrieval_cache_reuses_results_without_plaintext_query(monkeypatch):
