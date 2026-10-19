@@ -35,7 +35,7 @@ def _setting(name: str, default: str = "") -> str:
 def get_jingme_status() -> dict[str, Any]:
     """Return readiness metadata without exposing credentials or recipients."""
     command = "o2.cmd" if os.name == "nt" else "o2"
-    runtime_available = shutil.which(command) is not None
+    runtime_available = shutil.which(command) is not None or shutil.which("jdme.cmd" if os.name == "nt" else "jdme") is not None
     enabled = _setting("JINGME_ENABLED", "false").lower() in {"1", "true", "yes"}
     env_auth = all(_setting(name) for name in (
         "JME_APP_KEY", "JME_APP_SECRET", "JME_OPEN_TEAM_ID", "JME_ROBOT_ID"
@@ -135,6 +135,16 @@ def _run_o2(request: dict[str, Any], dry_run: bool) -> dict[str, Any]:
     if dry_run:
         args.append("--dry-run")
     completed = subprocess.run(args, capture_output=True, text=True, timeout=45, check=False)
+    # o2 can know a CLI from Registry while still missing its local install
+    # record. If that specific lazy-install path fails, use the same installed
+    # jdme entry point directly; never retry a real API/business failure.
+    combined = f"{completed.stdout}\n{completed.stderr}".lower()
+    if completed.returncode != 0 and ("lazy install" in combined or "not installed" in combined):
+        direct = "jdme.cmd" if os.name == "nt" else "jdme"
+        direct_args = [direct, "message.send-text", "--input", json.dumps(request, ensure_ascii=False), "--json"]
+        if dry_run:
+            direct_args.append("--dry-run")
+        completed = subprocess.run(direct_args, capture_output=True, text=True, timeout=45, check=False)
     if completed.returncode != 0:
         raise RuntimeError("京ME CLI调用失败")
     try:
