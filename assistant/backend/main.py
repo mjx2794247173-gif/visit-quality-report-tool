@@ -644,6 +644,22 @@ async def publishing_agent(state: MultiAgentState) -> MultiAgentState:
 def _next_agent(state: MultiAgentState) -> str:
     return state["agent"]
 
+async def validate_plan_node(state: MultiAgentState) -> MultiAgentState:
+    """Explicit graph boundary for validating the selected tool and plan."""
+    tool = state.get("tool")
+    plan = state.get("plan")
+    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+        raise RuntimeError("Agent 选择了不受支持的工具")
+    if not isinstance(plan, dict):
+        raise RuntimeError("Agent 返回了无效的查询计划")
+    if tool == "spreadsheet_query":
+        SpreadsheetPlan.model_validate(plan)
+    elif tool == "knowledge_retrieval":
+        KnowledgePlan.model_validate(plan)
+    else:
+        EmptyToolPlan.model_validate(plan)
+    return {**state, "plan_validated": True}
+
 
 def plan_signature(session_id: str, workflow_id: str, question: str, tool: str, plan: dict[str, Any]) -> str:
     """Create a stable binding for one browser-executed plan."""
@@ -658,6 +674,7 @@ _multi_agent_builder.add_node("data_agent", data_agent)
 _multi_agent_builder.add_node("knowledge_agent", knowledge_agent)
 _multi_agent_builder.add_node("quality_agent", quality_agent)
 _multi_agent_builder.add_node("publishing_agent", publishing_agent)
+_multi_agent_builder.add_node("validate_plan", validate_plan_node)
 _multi_agent_builder.set_entry_point("supervisor_agent")
 _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
     "data_agent":"data_agent",
@@ -666,7 +683,8 @@ _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
     "publishing_agent":"publishing_agent",
 })
 for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent"):
-    _multi_agent_builder.add_edge(_agent_node, END)
+    _multi_agent_builder.add_edge(_agent_node, "validate_plan")
+_multi_agent_builder.add_edge("validate_plan", END)
 MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
 
 @app.post("/api/plan")
