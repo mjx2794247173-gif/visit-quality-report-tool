@@ -50,7 +50,7 @@ RETRIEVAL_CACHE_MAX_ENTRIES = 128
 AUDIT_ALLOWED_FIELDS = {
     "action", "ok", "agent", "tool", "route", "validated", "source_count",
     "retrieval_attempts", "rerank_applied", "relevance_filter_applied",
-    "sufficient", "elapsed_ms", "error_type", "status", "trace_id",
+    "sufficient", "answer_review_status", "answer_repair_attempts", "elapsed_ms", "error_type", "status", "trace_id",
 }
 _rag_collection = None
 _rag_model = None
@@ -839,7 +839,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     await save_working_memory_async(payload.session_id, state["working_memory"])
     state.pop("pending_workflow", None)
     await clear_pending_workflow_async(payload.session_id)
-    audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
+    audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"answer_review_status":review.get("status"),"answer_repair_attempts":1 if review.get("status") in {"repaired_once", "repair_failed"} else 0,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True},"answer_review":review})
 
 async def review_answer(question: str, plan: dict[str, Any], result: dict[str, Any], answer: str) -> dict[str, Any]:
