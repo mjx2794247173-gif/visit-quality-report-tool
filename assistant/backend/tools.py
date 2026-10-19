@@ -132,6 +132,23 @@ def validate_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     valid = isinstance(result, dict) and isinstance(result.get("tool"), str)
     return {"valid": valid, "errors": [] if valid else ["工具结果缺少 tool 字段"], "tool": result.get("tool") if isinstance(result, dict) else None}
 
+def validate_tool_result_against_plan(tool: str, plan: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Validate that a browser result belongs to the exact planned tool call."""
+    errors: list[str] = []
+    if not isinstance(result, dict) or result.get("tool") != tool:
+        errors.append("工具名与查询计划不一致")
+    if tool == "spreadsheet_query":
+        if not isinstance(result, dict) or not isinstance(result.get("rows"), list):
+            errors.append("表格查询结果缺少 rows")
+        scope = result.get("scope") if isinstance(result, dict) else None
+        if not isinstance(scope, dict):
+            errors.append("表格查询结果缺少 scope")
+        else:
+            for key in ("filters", "group_by", "metric", "order", "limit"):
+                if scope.get(key) != plan.get(key):
+                    errors.append(f"表格查询字段不一致: {key}")
+    return {"valid": not errors, "errors": errors, "tool": tool}
+
 TOOL_DEFINITIONS = [
     {"type":"function","function":{"name":"problem_type_ranking","description":"先识别省区、指标、排序和日期范围，再统计质检问题类型","parameters":{"type":"object","properties":{"province":{"type":"string"},"metric":{"type":"string","enum":["拜访条数"]},"sort":{"type":"string","enum":["asc","desc"]},"date_range":{"type":"string"}},"additionalProperties":False}}},
     {"type":"function","function":{"name":"station_summary","description":"按省区、日期和质检问题类型返回站长排名；用户问谁、哪个、前几名或 Top N 时使用","parameters":{"type":"object","properties":{"province":{"type":"string"},"date":{"type":"string"},"top_n":{"type":"integer","minimum":1,"maximum":50}},"additionalProperties":False}}},

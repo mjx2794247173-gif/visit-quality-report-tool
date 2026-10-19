@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from langgraph.graph import END, StateGraph
-from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result
+from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
 
@@ -651,13 +651,9 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     if pending.get("question") != payload.question or pending.get("plan") != payload.plan:
         return JSONResponse({"error":"查询问题或计划与工作流不一致，请重新规划"}, status_code=409)
     tool_name = str(result.get("tool") or "")
-    if tool_name != pending.get("tool"):
-        return JSONResponse({"error":"工具结果类型与查询计划不一致"}, status_code=422)
-    if tool_name == "spreadsheet_query":
-        scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
-        expected = payload.plan
-        if any(scope.get(key) != expected.get(key) for key in ("filters", "group_by", "metric", "order", "limit")):
-            return JSONResponse({"error":"表格工具结果的查询条件与计划不一致"}, status_code=422)
+    bound_validation = validate_tool_result_against_plan(tool_name, payload.plan, result)
+    if not bound_validation["valid"]:
+        return JSONResponse({"error":"工具结果与查询计划不一致", "validation": bound_validation}, status_code=422)
     if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
         return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
     if tool_name == "spreadsheet_query":

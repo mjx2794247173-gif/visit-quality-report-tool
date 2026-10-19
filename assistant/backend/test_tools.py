@@ -1,5 +1,5 @@
 import json
-from tools import attach_erp_lookup, choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup, has_date_condition
+from tools import attach_erp_lookup, choose_tool, consecutive_problem_days, extract_erp, problem_type_ranking, station_multi_problem_types, validate_tool_result, validate_tool_result_against_plan, TOOL_DEFINITIONS, execute_tool, generate_bulletin_summary, station_lookup, has_date_condition
 from supervisor import supervise
 
 CONTEXT = {
@@ -11,6 +11,13 @@ CONTEXT = {
         {"erp": "erp-2", "province": "华东", "types": ["拍照不规范"], "problemDates": ["2026-10-01"]},
     ],
 }
+
+def test_validate_tool_result_against_plan_rejects_tampered_scope():
+    plan = {"filters": {"province": "广东省区"}, "group_by": "station_erp", "metric": "visit_count", "order": "desc", "limit": 5}
+    result = {"tool": "spreadsheet_query", "scope": {**plan, "limit": 10}, "rows": []}
+    validation = validate_tool_result_against_plan("spreadsheet_query", plan, result)
+    assert validation["valid"] is False
+    assert "limit" in validation["errors"][0]
 
 def test_ranking_uses_visit_counts():
     result = problem_type_ranking(CONTEXT)
