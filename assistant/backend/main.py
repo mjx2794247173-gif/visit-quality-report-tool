@@ -579,6 +579,12 @@ def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, 
         {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
 
+def normalize_spreadsheet_limit(question: str, limit: int) -> int:
+    """Use one result for singular questions unless the user requests Top N."""
+    explicit_top_n = re.search(r"(?:前|top\s*)\s*(?:[一二三四五六七八九十\d]+)", question, re.I)
+    singular = re.search(r"哪个|哪位|谁是|是谁", question)
+    return 1 if singular and not explicit_top_n else limit
+
 
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
@@ -588,6 +594,7 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
     except Exception as exc:
         raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试") from exc
     plan = query_plan.model_dump()
+    plan["limit"] = normalize_spreadsheet_limit(state["question"], plan["limit"])
     filters = plan["filters"]
     issue_type = filters["issue_type"]
     if issue_type and str(issue_type) not in state["question"]:

@@ -6,7 +6,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -248,6 +248,10 @@ def test_plan_signature_is_stable_and_changes_when_plan_changes():
     assert len(first) == 64
     changed = {**base, "limit": 4}
     assert first != plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", changed)
+
+def test_singular_question_normalizes_limit_but_top_n_is_preserved():
+    assert normalize_spreadsheet_limit("哪个站长问题最多？", 5) == 1
+    assert normalize_spreadsheet_limit("问题最多的前5名站长是谁？", 5) == 5
 
 
 def test_working_memory_keeps_only_validated_query_conditions():
