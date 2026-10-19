@@ -4,12 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import uuid
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .evaluation import score_plan_result
+from .evaluation import score_plan_result, summarize_evaluation
 
 
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
@@ -48,22 +49,46 @@ def main() -> int:
         cases = cases[:args.limit]
 
     passed = 0
+    records = []
     for case in cases:
+        started = time.perf_counter()
         try:
             actual = _post_plan(args.base_url, case["question"])
             score = score_plan_result(actual, case)
         except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+            records.append({
+                "case_id": case["id"],
+                "request_ok": False,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+            })
             print(f"FAIL {case['id']}: request_error={type(exc).__name__}")
             continue
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        records.append({
+            "case_id": case["id"],
+            "request_ok": True,
+            "elapsed_ms": elapsed_ms,
+            "score": score,
+        })
         if score["passed"]:
             passed += 1
-            print(f"PASS {case['id']}")
+            print(f"PASS {case['id']} ({elapsed_ms} ms)")
         else:
             failed = ",".join(score["failed_checks"])
-            print(f"FAIL {case['id']}: {failed}; actual={json.dumps(actual, ensure_ascii=False)}")
+            print(f"FAIL {case['id']}: {failed} ({elapsed_ms} ms); actual={json.dumps(actual, ensure_ascii=False)}")
 
     total = len(cases)
+    metrics = summarize_evaluation(records)
     print(f"RESULT {passed}/{total} passed")
+    print(
+        "METRICS "
+        f"agent={metrics['agent_accuracy']:.1%} "
+        f"tool={metrics['tool_accuracy']:.1%} "
+        f"plan={metrics['plan_accuracy']:.1%} "
+        f"overall={metrics['overall_accuracy']:.1%} "
+        f"request_failure={metrics['request_failure_rate']:.1%} "
+        f"avg_latency={metrics['average_elapsed_ms']:.1f}ms"
+    )
     return 0 if passed == total else 1
 
 

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from assistant.backend.evaluation import matches_subset, score_plan_result
+from assistant.backend.evaluation import matches_subset, score_plan_result, summarize_evaluation
 
 
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
@@ -41,3 +41,48 @@ def test_score_plan_result_identifies_each_failure_layer():
     )
     assert score["passed"] is False
     assert score["failed_checks"] == ["agent", "tool", "plan"]
+
+
+def test_evaluation_summary_separates_quality_latency_and_request_failures():
+    metrics = summarize_evaluation([
+        {
+            "request_ok": True,
+            "elapsed_ms": 100,
+            "score": {
+                "passed": True,
+                "checks": {"agent": True, "tool": True, "plan": True},
+            },
+        },
+        {
+            "request_ok": True,
+            "elapsed_ms": 300,
+            "score": {
+                "passed": False,
+                "checks": {"agent": True, "tool": False, "plan": False},
+            },
+        },
+        {"request_ok": False, "elapsed_ms": 50},
+    ])
+    assert metrics == {
+        "total": 3,
+        "completed": 2,
+        "agent_accuracy": 1.0,
+        "tool_accuracy": 0.5,
+        "plan_accuracy": 0.5,
+        "overall_accuracy": 0.5,
+        "request_failure_rate": 0.3333,
+        "average_elapsed_ms": 200.0,
+    }
+
+
+def test_empty_evaluation_summary_is_safe():
+    assert summarize_evaluation([]) == {
+        "total": 0,
+        "completed": 0,
+        "agent_accuracy": 0.0,
+        "tool_accuracy": 0.0,
+        "plan_accuracy": 0.0,
+        "overall_accuracy": 0.0,
+        "request_failure_rate": 0.0,
+        "average_elapsed_ms": 0.0,
+    }
