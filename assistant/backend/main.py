@@ -788,6 +788,13 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"status":"invalid_model_response","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
     review = await review_answer(payload.question, payload.plan, result, answer)
+    if review.get("status") == "reviewed" and not review.get("is_complete"):
+        repaired = await regenerate_answer(payload.question, payload.plan, result, answer, str(review.get("missing_parts") or ""), answer_system)
+        if repaired:
+            answer = repaired
+            review = {"is_complete": True, "missing_parts": "", "status": "repaired_once"}
+        else:
+            review["status"] = "repair_failed"
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
@@ -820,6 +827,20 @@ async def review_answer(question: str, plan: dict[str, Any], result: dict[str, A
     except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
         logger.warning("answer_review_failed")
         return {"is_complete": True, "missing_parts": "", "status": "review_failed"}
+
+async def regenerate_answer(question: str, plan: dict[str, Any], result: dict[str, Any], previous_answer: str, missing_parts: str, system_prompt: str) -> str | None:
+    """Allow exactly one bounded repair pass using the same verified result."""
+    material = {"question": question, "plan": plan, "verified_result": result, "previous_answer": previous_answer, "missing_parts": missing_parts}
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":system_prompt + "上一版回答被验收器指出不完整。只能补齐缺失部分，必须继续只依据已校验结果，不得重新计算或编造。"},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
+        if response.status_code >= 400:
+            return None
+        answer = response.json()["choices"][0]["message"].get("content", "").replace("**", "").strip()
+        return answer or None
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
+        logger.warning("answer_repair_failed")
+        return None
 
 
 async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]], tool_result: dict[str, Any] | None = None) -> tuple[str, list[str]]:
