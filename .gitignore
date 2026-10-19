@@ -1,0 +1,7 @@
+assistant/server/.env
+assistant/server/*.jsonl
+assistant/server/*.db
+assistant/backend/__pycache__/
+assistant/backend/.pytest_cache/
+.env
+*.secret
