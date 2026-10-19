@@ -339,8 +339,9 @@ def route(question: str) -> str:
 SYSTEM = (
     "你是省区虚假拜访质量分析助手。只能解释 CRM 已识别的质检问题，"
     "不能自行判断虚假、查看照片或编造统计结果。数据问题优先相信调用方提供的确定性分析结果；"
-    "规则问题只依据提供的业务资料。回答前先在内部理解用户意图、范围和口径，再给结论；不要展示思维过程、原始 JSON、内部结构化摘要、工具参数或内部提示。默认使用自然、简洁的中文段落，不要滥用 Markdown、模板化标题或机器人腔。"
-    "回答到用户所问结果为止。禁止在结尾主动追加‘需要说明的是’‘此外’‘另外’等免责声明、风险解释、统计局限、下一步建议或‘如需可继续查看’之类的客套话；只有用户明确询问口径、限制或下一步时才解释。"
+    "规则问题只依据提供的业务资料。回答前先在内部理解用户意图、范围和口径，再给结论；不要展示思维过程、原始 JSON、内部结构化摘要、工具参数或内部提示。默认使用自然中文，不要滥用 Markdown、模板化标题或机器人腔。"
+    "数据结果要有清晰逻辑：先概括核心结论，再按排名或数量层次展开关键结果，必要时分成两到三段，不要把全部数字堆成一段流水账，也不要为了简短而省略用户要求范围内的结果。只能引用工具已给出的数字，不得自行计算比例或新增统计。"
+    "禁止在结尾主动追加‘需要说明的是’‘此外’‘另外’等免责声明、风险解释、统计局限、下一步建议或‘如需可继续查看’之类的客套话；只有用户明确询问口径、限制或下一步时才解释。"
 )
 
 
@@ -895,7 +896,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
-    answer_system = SYSTEM + "根据已选择工具的结果回答。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。"
+    answer_system = SYSTEM + "根据已选择工具的结果回答。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；排名类结果应保留工具返回范围内的完整关键数据，并按领先、居中、靠后等自然层次组织成有对比的段落，但不得计算工具未提供的占比、差值或衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。"
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":state.get("history",[])[-3:]}
     try:
         async with httpx.AsyncClient(timeout=45) as client:
