@@ -248,6 +248,7 @@ def test_plan_signature_is_stable_and_changes_when_plan_changes():
     assert len(first) == 64
     changed = {**base, "limit": 4}
     assert first != plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", changed)
+    assert first != plan_signature("c" * 32, "b" * 32, "问题", "spreadsheet_query", base)
 
 def test_singular_question_normalizes_limit_but_top_n_is_preserved():
     assert normalize_spreadsheet_limit("哪个站长问题最多？", 5) == 1
@@ -325,6 +326,14 @@ def test_pending_workflow_persists_only_binding_metadata(tmp_path, monkeypatch):
     raw = database.read_bytes()
     assert b"employee123" not in raw
     assert b"plan" not in raw
+
+def test_expired_pending_workflow_is_not_restored(tmp_path, monkeypatch):
+    database = tmp_path / "memory.sqlite3"
+    monkeypatch.setattr("assistant.backend.main.MEMORY_DB", database)
+    save_pending_workflow("expired-session", {"workflow_id": "a" * 32, "signature": "b" * 64})
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE pending_workflows SET updated_at = 0")
+    assert load_pending_workflow("expired-session") is None
 
 
 def test_retrieval_cache_reuses_results_without_plaintext_query(monkeypatch):
