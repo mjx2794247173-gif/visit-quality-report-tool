@@ -71,6 +71,7 @@ class PlanRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     schema_context: dict[str, Any] = Field(default_factory=dict)
     session_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
 class AnswerRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
@@ -80,6 +81,7 @@ class AnswerRequest(BaseModel):
     trace_id: str = Field(default="", pattern=r"^[a-f0-9]{32}$")
     workflow_id: str = Field(default="", pattern=r"^(|[a-f0-9]{32})$")
     plan_signature: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
+    file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
 
 class FeishuSendRequest(BaseModel):
@@ -148,6 +150,7 @@ class WorkflowBinding(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"]
     plan: dict[str, Any]
+    file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
 
 class RetrievalRewrite(BaseModel):
@@ -723,9 +726,9 @@ async def validate_plan_node(state: MultiAgentState) -> MultiAgentState:
     return {**state, "plan_validated": True}
 
 
-def plan_signature(session_id: str, workflow_id: str, question: str, tool: str, plan: dict[str, Any]) -> str:
+def plan_signature(session_id: str, workflow_id: str, question: str, tool: str, plan: dict[str, Any], file_fingerprint: str = "") -> str:
     """Create a stable binding for one browser-executed plan."""
-    material = {"session_id": session_id, "workflow_id": workflow_id, "question": question, "tool": tool, "plan": plan}
+    material = {"session_id": session_id, "workflow_id": workflow_id, "question": question, "tool": tool, "plan": plan, "file_fingerprint": file_fingerprint}
     encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -779,8 +782,8 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
             _plan_cache.popitem(last=False)
     workflow_id = uuid.uuid4().hex
     plan = graph_result.get("plan", {})
-    signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
-    state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool=graph_result["tool"], plan=plan, signature=signature).model_dump()
+    signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan, payload.file_fingerprint)
+    state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool=graph_result["tool"], plan=plan, signature=signature, file_fingerprint=payload.file_fingerprint).model_dump()
     if PERSIST_SESSION_STATE:
         await save_pending_workflow_async(payload.session_id, state["pending_workflow"])
     audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
@@ -797,10 +800,10 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     pending = state.get("pending_workflow") if state else None
     persisted = await load_pending_workflow_async(payload.session_id) if PERSIST_SESSION_STATE else None
     if pending is None and persisted:
-        expected_signature = plan_signature(payload.session_id, payload.workflow_id, payload.question, str(payload.tool_result.get("tool") or ""), payload.plan)
+        expected_signature = plan_signature(payload.session_id, payload.workflow_id, payload.question, str(payload.tool_result.get("tool") or ""), payload.plan, payload.file_fingerprint)
         if persisted.get("workflow_id") == payload.workflow_id and persisted.get("signature") == expected_signature:
             pending = {**persisted, "question": payload.question, "tool": payload.tool_result.get("tool"), "plan": payload.plan}
-    if not pending or pending.get("workflow_id") != payload.workflow_id or pending.get("signature") != payload.plan_signature:
+    if not pending or pending.get("workflow_id") != payload.workflow_id or pending.get("signature") != payload.plan_signature or pending.get("file_fingerprint", "") != payload.file_fingerprint:
         return JSONResponse({"error":"工具结果与当前查询计划不匹配，请重新规划"}, status_code=409)
     if pending.get("question") != payload.question or pending.get("plan") != payload.plan:
         return JSONResponse({"error":"查询问题或计划与工作流不一致，请重新规划"}, status_code=409)

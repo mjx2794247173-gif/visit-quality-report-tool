@@ -253,6 +253,7 @@ def test_plan_signature_is_stable_and_changes_when_plan_changes():
     changed = {**base, "limit": 4}
     assert first != plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", changed)
     assert first != plan_signature("c" * 32, "b" * 32, "问题", "spreadsheet_query", base)
+    assert first != plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", base, "c" * 64)
 
 def test_singular_question_normalizes_limit_but_top_n_is_preserved():
     assert normalize_spreadsheet_limit("哪个站长问题最多？", 5) == 1
