@@ -93,6 +93,7 @@ class FeishuSendRequest(BaseModel):
 
 class JingMeSendRequest(BaseModel):
     analysis_result: dict[str, Any]
+    content: str | None = Field(default=None, min_length=1, max_length=12000)
     confirmed: bool = False
     dry_run: bool = False
     erp: str | None = Field(default=None, min_length=1, max_length=100)
@@ -1134,11 +1135,19 @@ async def jingme_send(payload: JingMeSendRequest) -> JSONResponse:
         return JSONResponse({"error": "发送前必须由用户确认"}, status_code=400)
     if bool(payload.erp) == bool(payload.group_id) and not (payload.group_id is None and os.getenv("JINGME_GROUP_ID", "").strip()):
         return JSONResponse({"error": "京ME目标必须且只能是 ERP 或群"}, status_code=422)
+    if payload.content is not None:
+        state = sessions.get(payload.session_id) or {}
+        history = state.get("history") or []
+        latest_answer = str(history[-1].get("answer") or "").strip() if history else ""
+        if not latest_answer or payload.content.strip() != latest_answer:
+            return JSONResponse({"error": "京ME内容与当前会话最新回答不一致，请重新生成后再发送"}, status_code=409)
     try:
-        build_jingme_message(payload.analysis_result)
+        if payload.content is None:
+            build_jingme_message(payload.analysis_result)
         adapter = get_jingme_adapter()
         result = await adapter.send_text(
             analysis_result=payload.analysis_result,
+            content=payload.content,
             erp=payload.erp,
             group_id=payload.group_id,
             dry_run=payload.dry_run,

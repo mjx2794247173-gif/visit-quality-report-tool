@@ -25,6 +25,7 @@ class JingMeAdapter(Protocol):
         self,
         *,
         analysis_result: dict[str, Any],
+        content: str | None = None,
         erp: str | None = None,
         group_id: str | None = None,
         dry_run: bool = False,
@@ -120,11 +121,32 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
     return fallback_text
 
 
+def split_jingme_message(content: str) -> list[str]:
+    """Split an answer without rewriting it or changing any statistics."""
+    text = str(content or "").strip()
+    if not text:
+        raise ValueError("京ME消息内容不能为空")
+    chunks: list[str] = []
+    current: list[str] = []
+    current_bytes = 0
+    for character in text:
+        encoded_size = len(character.encode("utf-8"))
+        if current and (len(current) + 1 > MAX_MESSAGE_CHARS or current_bytes + encoded_size > MAX_MESSAGE_BYTES):
+            chunks.append("".join(current))
+            current = []
+            current_bytes = 0
+        current.append(character)
+        current_bytes += encoded_size
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
 class O2JingMeAdapter:
     def __init__(self, runner: Any | None = None):
         self.runner = runner or _run_o2
 
-    async def send_text(self, *, analysis_result: dict[str, Any], erp: str | None = None,
+    async def send_text(self, *, analysis_result: dict[str, Any], content: str | None = None, erp: str | None = None,
                         group_id: str | None = None,
                         dry_run: bool = False) -> dict[str, Any]:
         status = get_jingme_status()
@@ -133,24 +155,31 @@ class O2JingMeAdapter:
         group_id = group_id or _setting("JINGME_GROUP_ID") or None
         if bool(erp) == bool(group_id):
             raise ValueError("京ME目标必须且只能是 ERP 或群")
-        request: dict[str, Any] = {"content": build_jingme_message(analysis_result)}
-        request["erp" if erp else "group_id"] = erp or group_id
+        messages = split_jingme_message(content) if content is not None else [build_jingme_message(analysis_result)]
+        target_key = "erp" if erp else "group_id"
+        target_value = erp or group_id
         robot_id = _setting("JINGME_DEFAULT_ROBOT_ID")
-        if robot_id:
-            request["robot_id"] = robot_id
-        result = await asyncio.to_thread(self.runner, request, dry_run)
-        if not isinstance(result, dict) or result.get("ok") is not True:
-            raise RuntimeError("京ME发送失败")
-        data = result.get("data") if isinstance(result.get("data"), dict) else {}
-        return {"success": True, "channel": "jingme", "packet_id": data.get("packet_id"), "dry_run": bool(dry_run)}
+        packet_ids: list[str] = []
+        for message in messages:
+            request: dict[str, Any] = {"content": message, target_key: target_value}
+            if robot_id:
+                request["robot_id"] = robot_id
+            result = await asyncio.to_thread(self.runner, request, dry_run)
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                raise RuntimeError("京ME发送失败")
+            data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            if data.get("packet_id"):
+                packet_ids.append(str(data["packet_id"]))
+        return {"success": True, "channel": "jingme", "packet_id": packet_ids[-1] if packet_ids else None,
+                "packet_ids": packet_ids, "message_count": len(messages), "dry_run": bool(dry_run)}
 
 
 class JingMeMockAdapter:
-    async def send_text(self, *, analysis_result: dict[str, Any], erp: str | None = None,
+    async def send_text(self, *, analysis_result: dict[str, Any], content: str | None = None, erp: str | None = None,
                         group_id: str | None = None,
                         dry_run: bool = False) -> dict[str, Any]:
         # Rendering validates that the payload is deterministic even in mock mode.
-        build_jingme_message(analysis_result)
+        split_jingme_message(content) if content is not None else build_jingme_message(analysis_result)
         return {"success": True, "channel": "jingme-mock", "message": "已模拟发送京ME通报", "dry_run": True}
 
 

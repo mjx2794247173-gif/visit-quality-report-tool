@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from assistant.backend.jingme import JingMeMockAdapter, O2JingMeAdapter, build_jingme_message, get_jingme_status
-from assistant.backend.main import JingMeSendRequest, jingme_send
+from assistant.backend.main import JingMeSendRequest, jingme_send, sessions
 
 
 def result():
@@ -57,6 +57,24 @@ def test_dry_run_does_not_require_credentials_and_marks_request():
     assert calls == [True]
 
 
+def test_exact_web_answer_is_sent_and_split_without_rewriting():
+    requests = []
+
+    def runner(request, dry_run):
+        requests.append(request)
+        return {"ok": True, "data": {"packet_id": f"packet-{len(requests)}"}}
+
+    content = "网页回答原文：" + "质检结果" * 250
+    response = asyncio.run(O2JingMeAdapter(runner).send_text(
+        analysis_result=result(), content=content, erp="erp-demo-01", dry_run=True
+    ))
+
+    assert "".join(item["content"] for item in requests) == content
+    assert response["message_count"] == len(requests)
+    assert response["message_count"] > 1
+    assert all(len(item["content"].encode("utf-8")) <= 1800 for item in requests)
+
+
 def test_status_does_not_expose_secret_or_recipient(monkeypatch):
     monkeypatch.setenv("JME_APP_SECRET", "do-not-log")
     monkeypatch.setenv("JINGME_GROUP_ID", "group-secret")
@@ -89,3 +107,14 @@ def test_unconfirmed_request_does_not_call_adapter(monkeypatch):
         analysis_result=result(), confirmed=False, erp="erp-demo-01"
     )))
     assert response.status_code == 400
+
+
+def test_jingme_rejects_content_that_is_not_latest_answer():
+    session_id = "jingme-content-check"
+    sessions[session_id] = {"history": [{"answer": "当前网页回答"}]}
+    response = asyncio.run(jingme_send(JingMeSendRequest(
+        analysis_result=result(), content="被替换的其他内容", confirmed=True,
+        dry_run=True, erp="erp-demo-01", session_id=session_id
+    )))
+
+    assert response.status_code == 409
