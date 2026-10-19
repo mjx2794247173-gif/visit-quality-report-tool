@@ -472,6 +472,17 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
         memory.last_tool = tool
     return memory.model_dump(exclude_none=True)
 
+def summarize_history_result(tool: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Keep conversation state useful without retaining aggregated labels or rows."""
+    summary = {"tool": tool}
+    if isinstance(result.get("rows"), list):
+        summary["row_count"] = len(result["rows"])
+    if isinstance(result.get("sources"), list):
+        summary["source_count"] = len(result["sources"])
+    if isinstance(result.get("assessment"), dict):
+        summary["sufficient"] = result["assessment"].get("is_sufficient")
+    return summary
+
 
 def _session_memory_key(session_id: str) -> str:
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
@@ -813,7 +824,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             review = {"is_complete": True, "missing_parts": "", "status": "repaired_once"}
         else:
             review["status"] = "repair_failed"
-    history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
+    history_result = summarize_history_result(tool_name, result)
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
     await save_working_memory_async(payload.session_id, state["working_memory"])

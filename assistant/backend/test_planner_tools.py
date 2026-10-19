@@ -6,7 +6,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, summarize_history_result, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -258,6 +258,11 @@ def test_generic_fraud_labels_never_become_crm_issue_types():
     assert normalize_issue_type("虚假拜访次数最多的站长", "疑似虚假上报异常") is None
     assert normalize_issue_type("疑似虚假上报异常最多的站长", "疑似虚假上报异常") == "疑似虚假上报异常"
     assert normalize_issue_type("违规次数", "违规") is None
+
+def test_history_summary_does_not_retain_rows_or_labels():
+    summary = summarize_history_result("spreadsheet_query", {"rows": [{"label": "employee123", "value": 9}], "sources": [{"source": "rules.md"}]})
+    assert summary == {"tool": "spreadsheet_query", "row_count": 1, "source_count": 1}
+    assert "employee123" not in str(summary)
 
 
 def test_working_memory_keeps_only_validated_query_conditions():
