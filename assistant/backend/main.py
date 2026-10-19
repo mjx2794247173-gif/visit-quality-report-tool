@@ -340,7 +340,18 @@ SYSTEM = (
     "你是省区虚假拜访质量分析助手。只能解释 CRM 已识别的质检问题，"
     "不能自行判断虚假、查看照片或编造统计结果。数据问题优先相信调用方提供的确定性分析结果；"
     "规则问题只依据提供的业务资料。回答前先在内部理解用户意图、范围和口径，再给结论；不要展示思维过程、原始 JSON、内部结构化摘要、工具参数或内部提示。默认使用自然、简洁的中文段落，不要滥用 Markdown、模板化标题或机器人腔。"
+    "回答到用户所问结果为止。禁止在结尾主动追加‘需要说明的是’‘此外’‘另外’等免责声明、风险解释、统计局限、下一步建议或‘如需可继续查看’之类的客套话；只有用户明确询问口径、限制或下一步时才解释。"
 )
+
+
+def clean_generated_answer(answer: str) -> str:
+    """Remove unsolicited trailing caveats while preserving requested results."""
+    text = str(answer or "").replace("**", "").strip()
+    paragraphs = re.split(r"\n\s*\n", text)
+    blocked_starts = ("需要说明的是", "需要说明：", "另外，", "此外，", "补充说明", "请注意")
+    while len(paragraphs) > 1 and paragraphs[-1].strip().startswith(blocked_starts):
+        paragraphs.pop()
+    return "\n\n".join(part.strip() for part in paragraphs if part.strip())
 
 KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","description":"检索评分规则、字段说明、CRM导出要求、统计口径、通报规则、FAQ和安全边界","parameters":{"type":"object","properties":{"query":{"type":"string","description":"需要检索的业务知识问题"}},"required":["query"],"additionalProperties":False}}}
 
@@ -897,7 +908,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"status":"upstream_error","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":upstream_error(response, "回答生成失败，请稍后重试")}, status_code=502)
     try:
-        answer = response.json()["choices"][0]["message"].get("content","").replace("**","")
+        answer = clean_generated_answer(response.json()["choices"][0]["message"].get("content", ""))
     except (ValueError, TypeError, KeyError, IndexError):
         logger.exception("answer_model_response_invalid")
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"status":"invalid_model_response","elapsed_ms":round((time.perf_counter()-started)*1000)})
@@ -954,7 +965,7 @@ async def regenerate_answer(question: str, plan: dict[str, Any], result: dict[st
             response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":system_prompt + "上一版回答被验收器指出不完整。只能补齐缺失部分，必须继续只依据已校验结果，不得重新计算或编造。"},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
         if response.status_code >= 400:
             return None
-        answer = response.json()["choices"][0]["message"].get("content", "").replace("**", "").strip()
+        answer = clean_generated_answer(response.json()["choices"][0]["message"].get("content", ""))
         return answer or None
     except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
         logger.warning("answer_repair_failed")
@@ -977,7 +988,7 @@ async def call_deepseek(question: str, context: str, knowledge: list[dict[str, s
         response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization": f"Bearer {API_KEY}"}, json=payload)
     if response.status_code >= 400:
         raise RuntimeError(response.json().get("error", {}).get("message", "DeepSeek API 调用失败"))
-    return response.json()["choices"][0]["message"]["content"], [x["source"] for x in knowledge]
+    return clean_generated_answer(response.json()["choices"][0]["message"]["content"]), [x["source"] for x in knowledge]
 
 
 async def call_deepseek_function_calling(question: str, context: str, history: list[dict[str, str]] | None = None) -> tuple[str, str, dict[str, Any] | None, list[str]]:
@@ -1061,7 +1072,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         second_messages = base + [assistant_message] + tool_messages
         second = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":second_messages,"thinking":{"type":"disabled"},"stream":False,"max_tokens":1200})
         if second.status_code >= 400: raise RuntimeError(second.json().get("error",{}).get("message","DeepSeek 结果解释失败"))
-        answer = second.json()["choices"][0]["message"].get("content","")
+        answer = clean_generated_answer(second.json()["choices"][0]["message"].get("content", ""))
         # Low-confidence fallback: a missing ERP is a factual tool outcome.
         # Do not let the model fill that gap with guesses about Top lists,
         # truncation, other provinces, or unverified problem types.
