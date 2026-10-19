@@ -110,7 +110,18 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
     text = "\n".join(summary)
     if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
         return text
-    raise ValueError("京ME通报内容过长，请缩小统计范围后重试")
+    # Last-resort deterministic fallback. This deliberately excludes all
+    # free-form explanation and ranking labels so a provider-side byte limit
+    # can never turn a valid analysis into a failed notification.
+    fallback = ["拜访质量通报", f"分析工具：{tool[:60]}"]
+    for key in ("province", "date", "date_range", "rows", "metric", "issue_type"):
+        value = analysis_result.get(key)
+        if value not in (None, ""):
+            fallback.append(f"{key}：{str(value)[:80]}")
+    fallback_text = "\n".join(fallback)
+    if len(fallback_text.encode("utf-8")) > MAX_MESSAGE_BYTES:
+        fallback_text = "\n".join(fallback[:4])
+    return fallback_text
 
 
 class O2JingMeAdapter:
