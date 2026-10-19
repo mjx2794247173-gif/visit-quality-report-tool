@@ -276,6 +276,12 @@ def test_context_compaction_keeps_only_structured_plan_fields():
     assert "客户A" not in str(compacted)
     assert "敏感回答" not in str(compacted)
 
+def test_context_compaction_summarizes_older_turns():
+    history = [{"tool": "knowledge_retrieval", "plan": {"query": "规则"}}] + [{"tool": "spreadsheet_query", "plan": {"limit": i}} for i in range(4)]
+    compacted = compact_context(history)
+    assert compacted[0] == {"summary": {"older_turns": 2, "tools": ["knowledge_retrieval", "spreadsheet_query"]}}
+    assert len(compacted) == 4
+
 def test_answer_endpoint_rejects_result_from_different_file(monkeypatch):
     session_id = "d" * 32
     workflow_id = "e" * 32

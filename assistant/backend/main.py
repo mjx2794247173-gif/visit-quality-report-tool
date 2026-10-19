@@ -499,9 +499,16 @@ def summarize_history_result(tool: str, result: dict[str, Any]) -> dict[str, Any
     return summary
 
 def compact_context(history: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
-    """Keep only structured, non-row context for multi-turn planning."""
+    """Keep recent structured plans and summarize older turns without row data."""
+    if not history:
+        return []
+    recent_count = min(3, limit)
+    older = history[:-recent_count]
     compacted = []
-    for item in history[-limit:]:
+    if older:
+        tools = [item.get("tool") or item.get("route") for item in older]
+        compacted.append({"summary": {"older_turns": len(older), "tools": sorted({tool for tool in tools if tool})}})
+    for item in history[-recent_count:]:
         compacted.append({"tool": item.get("tool") or item.get("route"), "plan": item.get("plan", {})})
     return compacted
 
