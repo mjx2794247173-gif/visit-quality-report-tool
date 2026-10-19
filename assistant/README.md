@@ -93,7 +93,7 @@ JINGME_GROUP_ID=
 JINGME_DEFAULT_ROBOT_ID=
 ```
 
-`jdme` 的认证由 o2 管理；认证材料不要写入仓库。当前公开适配器调用文字发送命令 `o2 launch jdme -- message.send-text`，目标可以是后端配置的群或用户 ERP，也可以带 `at_erps`。发送内容由 Python 已校验的结构化 Excel 统计结果生成，模型不能自行计算数字。用户必须在预览后明确确认；未确认不会调用发送接口。
+`jdme` 的认证由 o2 管理；认证材料不要写入仓库。当前公开适配器调用文字发送命令 `o2 launch jdme -- message.send-text`，目标可以是后端配置的群或用户 ERP。发送内容由 Python 已校验的结构化 Excel 统计结果生成，模型不能自行计算数字。用户必须在预览后明确确认；未确认不会调用发送接口。
 
 没有认证时，服务会明确返回“京ME未配置完成”，不会伪造发送成功。没有权限时可设置 `NOTIFICATION_PROVIDER=jingme-mock` 做本地演示；`dry_run=true` 只让 jdme 返回预览，不产生真实消息。飞书仍是默认的公开可运行通知渠道，原有飞书 MCP 接入保持不变。
 

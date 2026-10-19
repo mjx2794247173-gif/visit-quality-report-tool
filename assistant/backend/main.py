@@ -97,7 +97,6 @@ class JingMeSendRequest(BaseModel):
     dry_run: bool = False
     erp: str | None = Field(default=None, min_length=1, max_length=100)
     group_id: str | None = Field(default=None, min_length=1, max_length=200)
-    at_erps: list[str] = Field(default_factory=list, max_length=20)
     session_id: str = Field(default="browser-session", max_length=100)
 
 
@@ -1130,7 +1129,6 @@ async def jingme_send(payload: JingMeSendRequest) -> JSONResponse:
             analysis_result=payload.analysis_result,
             erp=payload.erp,
             group_id=payload.group_id,
-            at_erps=payload.at_erps,
             dry_run=payload.dry_run,
         )
     except Exception as exc:

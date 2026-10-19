@@ -23,7 +23,6 @@ class JingMeAdapter(Protocol):
         analysis_result: dict[str, Any],
         erp: str | None = None,
         group_id: str | None = None,
-        at_erps: list[str] | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]: ...
 
@@ -98,7 +97,7 @@ class O2JingMeAdapter:
         self.runner = runner or _run_o2
 
     async def send_text(self, *, analysis_result: dict[str, Any], erp: str | None = None,
-                        group_id: str | None = None, at_erps: list[str] | None = None,
+                        group_id: str | None = None,
                         dry_run: bool = False) -> dict[str, Any]:
         status = get_jingme_status()
         if not status["configured"] and not dry_run:
@@ -108,8 +107,6 @@ class O2JingMeAdapter:
             raise ValueError("京ME目标必须且只能是 ERP 或群")
         request: dict[str, Any] = {"content": build_jingme_message(analysis_result)}
         request["erp" if erp else "group_id"] = erp or group_id
-        if at_erps:
-            request["at_erps"] = [str(value) for value in at_erps[:20] if str(value).strip() and str(value).strip() != str(erp or "").strip()]
         robot_id = _setting("JINGME_DEFAULT_ROBOT_ID")
         if robot_id:
             request["robot_id"] = robot_id
@@ -122,7 +119,7 @@ class O2JingMeAdapter:
 
 class JingMeMockAdapter:
     async def send_text(self, *, analysis_result: dict[str, Any], erp: str | None = None,
-                        group_id: str | None = None, at_erps: list[str] | None = None,
+                        group_id: str | None = None,
                         dry_run: bool = False) -> dict[str, Any]:
         # Rendering validates that the payload is deterministic even in mock mode.
         build_jingme_message(analysis_result)

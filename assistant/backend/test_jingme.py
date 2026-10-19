@@ -35,13 +35,12 @@ def test_real_adapter_calls_jdme_after_confirmation_layer_passes_payload(monkeyp
     monkeypatch.setenv("JME_ROBOT_ID", "robot-secret")
     monkeypatch.setattr("assistant.backend.jingme.shutil.which", lambda command: command)
     response = asyncio.run(O2JingMeAdapter(runner).send_text(
-        analysis_result=result(), erp="erp-demo-01", at_erps=["erp-demo-02"]
+        analysis_result=result(), erp="erp-demo-01"
     ))
     assert response["success"] is True
     assert response["packet_id"] == "packet-demo"
     assert calls[0][0]["content"] == build_jingme_message(result())
     assert calls[0][0]["erp"] == "erp-demo-01"
-    assert calls[0][0]["at_erps"] == ["erp-demo-02"]
 
 
 def test_dry_run_does_not_require_credentials_and_marks_request():
