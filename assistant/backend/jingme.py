@@ -130,26 +130,44 @@ class JingMeMockAdapter:
 
 
 def _run_o2(request: dict[str, Any], dry_run: bool) -> dict[str, Any]:
-    command = "o2.cmd" if os.name == "nt" else "o2"
-    args = [command, "launch", "jdme", "--", "message.send-text", "--input", json.dumps(request, ensure_ascii=False), "--json"]
+    o2_command = shutil.which("o2.exe" if os.name == "nt" else "o2")
+    jdme_command = shutil.which("jdme.cmd" if os.name == "nt" else "jdme")
+    # When jdme is installed globally, prefer its verified entry point. The
+    # registry-backed `o2 launch` may return an empty success while attempting
+    # its own lazy install record on Windows.
+    command = jdme_command or o2_command
+    if not command:
+        raise RuntimeError("未找到 o2 或 jdme 命令")
+    args = ([command, "message.send-text"] if jdme_command else [command, "launch", "jdme", "--", "message.send-text"]) + ["--input", json.dumps(request, ensure_ascii=False), "--json"]
     if dry_run:
         args.append("--dry-run")
-    completed = subprocess.run(args, capture_output=True, text=True, timeout=45, check=False)
+    completed = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45, check=False)
     # o2 can know a CLI from Registry while still missing its local install
     # record. If that specific lazy-install path fails, use the same installed
     # jdme entry point directly; never retry a real API/business failure.
     combined = f"{completed.stdout}\n{completed.stderr}".lower()
     if completed.returncode != 0 and ("lazy install" in combined or "not installed" in combined):
-        direct = "jdme.cmd" if os.name == "nt" else "jdme"
+        direct = jdme_command or ("jdme.cmd" if os.name == "nt" else "jdme")
         direct_args = [direct, "message.send-text", "--input", json.dumps(request, ensure_ascii=False), "--json"]
         if dry_run:
             direct_args.append("--dry-run")
-        completed = subprocess.run(direct_args, capture_output=True, text=True, timeout=45, check=False)
+        completed = subprocess.run(direct_args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45, check=False)
     if completed.returncode != 0:
         raise RuntimeError("京ME CLI调用失败")
     try:
-        return json.loads(completed.stdout)
+        return json.loads(completed.stdout or "")
     except json.JSONDecodeError as exc:
+        combined = f"{completed.stdout}\n{completed.stderr}".lower()
+        if jdme_command and "lazy install" in combined:
+            direct_args = [jdme_command, "message.send-text", "--input", json.dumps(request, ensure_ascii=False), "--json"]
+            if dry_run:
+                direct_args.append("--dry-run")
+            direct = subprocess.run(direct_args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45, check=False)
+            if direct.returncode == 0:
+                try:
+                    return json.loads(direct.stdout or "")
+                except json.JSONDecodeError:
+                    pass
         raise RuntimeError("京ME CLI返回格式异常") from exc
 
 
