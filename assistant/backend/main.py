@@ -45,6 +45,7 @@ logger = logging.getLogger("visit_quality_assistant")
 AUDIT_LOG = ROOT / "server" / "assistant_calls.jsonl"
 MEMORY_DB = ROOT / "server" / "session_memory.sqlite3"
 MEMORY_TTL_SECONDS = 7 * 24 * 60 * 60
+PERSIST_SESSION_STATE = os.getenv("PERSIST_SESSION_STATE", "false").lower() in {"1", "true", "yes"}
 RETRIEVAL_CACHE_TTL_SECONDS = 10 * 60
 RETRIEVAL_CACHE_MAX_ENTRIES = 128
 PLAN_CACHE_TTL_SECONDS = 60
@@ -758,7 +759,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     state = sessions.setdefault(payload.session_id, {"history": []})
     if "working_memory" not in state:
         state["working_memory"] = await load_working_memory_async(payload.session_id)
-    if not state.get("history"):
+    if PERSIST_SESSION_STATE and not state.get("history"):
         state["history"] = await load_context_summary_async(payload.session_id)
     recent = state.get("history", [])[-4:]
     cache_key = _plan_cache_key(payload.session_id, payload.question, payload.schema_context, state.get("working_memory", {}))
@@ -780,7 +781,8 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     plan = graph_result.get("plan", {})
     signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
     state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool=graph_result["tool"], plan=plan, signature=signature).model_dump()
-    await save_pending_workflow_async(payload.session_id, state["pending_workflow"])
+    if PERSIST_SESSION_STATE:
+        await save_pending_workflow_async(payload.session_id, state["pending_workflow"])
     audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"workflow_id":workflow_id,"plan_signature":signature,"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":plan})
 
@@ -793,7 +795,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"缺少查询工作流绑定信息，请重新规划"}, status_code=409)
     state = sessions.get(payload.session_id)
     pending = state.get("pending_workflow") if state else None
-    persisted = await load_pending_workflow_async(payload.session_id)
+    persisted = await load_pending_workflow_async(payload.session_id) if PERSIST_SESSION_STATE else None
     if pending is None and persisted:
         expected_signature = plan_signature(payload.session_id, payload.workflow_id, payload.question, str(payload.tool_result.get("tool") or ""), payload.plan)
         if persisted.get("workflow_id") == payload.workflow_id and persisted.get("signature") == expected_signature:
@@ -846,10 +848,12 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state = sessions.setdefault(payload.session_id, {"history": []})
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
-            await save_working_memory_async(payload.session_id, state["working_memory"])
-            await save_context_summary_async(payload.session_id, state["history"])
+            if PERSIST_SESSION_STATE:
+                await save_working_memory_async(payload.session_id, state["working_memory"])
+                await save_context_summary_async(payload.session_id, state["history"])
             state.pop("pending_workflow", None)
-            await clear_pending_workflow_async(payload.session_id)
+            if PERSIST_SESSION_STATE:
+                await clear_pending_workflow_async(payload.session_id)
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -889,10 +893,12 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     history_result = summarize_history_result(tool_name, result)
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
-    await save_working_memory_async(payload.session_id, state["working_memory"])
-    await save_context_summary_async(payload.session_id, state["history"])
+    if PERSIST_SESSION_STATE:
+        await save_working_memory_async(payload.session_id, state["working_memory"])
+        await save_context_summary_async(payload.session_id, state["history"])
     state.pop("pending_workflow", None)
-    await clear_pending_workflow_async(payload.session_id)
+    if PERSIST_SESSION_STATE:
+        await clear_pending_workflow_async(payload.session_id)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"answer_review_status":review.get("status"),"answer_repair_attempts":1 if review.get("status") in {"repaired_once", "repair_failed"} else 0,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True},"answer_review":review})
 
@@ -1051,7 +1057,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "blocking_io":"thread_offload", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_hashed_ttl_sanitized", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "blocking_io":"thread_offload", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_optional" if PERSIST_SESSION_STATE else "memory_session_local_only", "feishu": get_feishu_status()}
 
 
 @app.get("/api/feishu/status")
