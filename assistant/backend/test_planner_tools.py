@@ -220,6 +220,8 @@ def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
         "ok": True,
         "tool": "knowledge_retrieval",
         "source_count": 3,
+        "answer_review_status": "repaired_once",
+        "answer_repair_attempts": 1,
         "trace_id": "a" * 32,
         "question": "不应记录的用户问题",
         "rows": [{"customer": "不应记录的客户"}],
@@ -229,6 +231,8 @@ def test_audit_log_keeps_only_safe_operational_metadata(tmp_path, monkeypatch):
     assert saved["action"] == "answer"
     assert saved["source_count"] == 3
     assert saved["trace_id"] == "a" * 32
+    assert saved["answer_review_status"] == "repaired_once"
+    assert saved["answer_repair_attempts"] == 1
     assert "question" not in saved
     assert "rows" not in saved
     assert "answer" not in saved
