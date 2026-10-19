@@ -47,6 +47,8 @@ MEMORY_DB = ROOT / "server" / "session_memory.sqlite3"
 MEMORY_TTL_SECONDS = 7 * 24 * 60 * 60
 RETRIEVAL_CACHE_TTL_SECONDS = 10 * 60
 RETRIEVAL_CACHE_MAX_ENTRIES = 128
+PLAN_CACHE_TTL_SECONDS = 60
+PLAN_CACHE_MAX_ENTRIES = 64
 AUDIT_ALLOWED_FIELDS = {
     "action", "ok", "agent", "tool", "route", "validated", "source_count",
     "retrieval_attempts", "rerank_applied", "relevance_filter_applied",
@@ -55,6 +57,7 @@ AUDIT_ALLOWED_FIELDS = {
 _rag_collection = None
 _rag_model = None
 _retrieval_cache: OrderedDict[str, tuple[float, list[dict[str, str]]]] = OrderedDict()
+_plan_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
 
 
 class ChatRequest(BaseModel):
@@ -491,6 +494,17 @@ def summarize_history_result(tool: str, result: dict[str, Any]) -> dict[str, Any
         summary["sufficient"] = result["assessment"].get("is_sufficient")
     return summary
 
+def compact_context(history: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    """Keep only structured, non-row context for multi-turn planning."""
+    compacted = []
+    for item in history[-limit:]:
+        compacted.append({"tool": item.get("tool") or item.get("route"), "plan": item.get("plan", {})})
+    return compacted
+
+def _plan_cache_key(session_id: str, question: str, schema: dict[str, Any], memory: dict[str, Any]) -> str:
+    material = json.dumps({"session": session_id, "question": question, "schema": schema, "memory": memory}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
 
 def _session_memory_key(session_id: str) -> str:
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
@@ -517,6 +531,27 @@ def save_working_memory(session_id: str, memory: dict[str, Any]) -> None:
             )
     except sqlite3.Error:
         logger.warning("session_memory_save_failed")
+
+def save_context_summary(session_id: str, history: list[dict[str, Any]]) -> None:
+    now = int(time.time())
+    summary = compact_context(history)
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS session_context (session_key TEXT PRIMARY KEY, summary_json TEXT NOT NULL, updated_at INTEGER NOT NULL)")
+            connection.execute("INSERT INTO session_context(session_key, summary_json, updated_at) VALUES(?, ?, ?) ON CONFLICT(session_key) DO UPDATE SET summary_json=excluded.summary_json, updated_at=excluded.updated_at", (_session_memory_key(session_id), json.dumps(summary, ensure_ascii=False), now))
+    except sqlite3.Error:
+        logger.warning("session_context_save_failed")
+
+def load_context_summary(session_id: str) -> list[dict[str, Any]]:
+    if not MEMORY_DB.exists():
+        return []
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            row = connection.execute("SELECT summary_json FROM session_context WHERE session_key = ? AND updated_at >= ?", (_session_memory_key(session_id), int(time.time()) - MEMORY_TTL_SECONDS)).fetchone()
+        return compact_context(json.loads(row[0])) if row else []
+    except (sqlite3.Error, ValueError, TypeError):
+        logger.warning("session_context_load_failed")
+        return []
 
 def save_pending_workflow(session_id: str, workflow: dict[str, Any]) -> None:
     """Persist only hashes and identifiers; never persist the query plan itself."""
@@ -574,6 +609,12 @@ async def load_working_memory_async(session_id: str) -> dict[str, Any]:
 
 async def save_working_memory_async(session_id: str, memory: dict[str, Any]) -> None:
     await asyncio.to_thread(save_working_memory, session_id, memory)
+
+async def save_context_summary_async(session_id: str, history: list[dict[str, Any]]) -> None:
+    await asyncio.to_thread(save_context_summary, session_id, history)
+
+async def load_context_summary_async(session_id: str) -> list[dict[str, Any]]:
+    return await asyncio.to_thread(load_context_summary, session_id)
 
 async def save_pending_workflow_async(session_id: str, workflow: dict[str, Any]) -> None:
     await asyncio.to_thread(save_pending_workflow, session_id, workflow)
@@ -717,13 +758,24 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     state = sessions.setdefault(payload.session_id, {"history": []})
     if "working_memory" not in state:
         state["working_memory"] = await load_working_memory_async(payload.session_id)
+    if not state.get("history"):
+        state["history"] = await load_context_summary_async(payload.session_id)
     recent = state.get("history", [])[-4:]
-    try:
-        graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent,"working_memory":state.get("working_memory",{})})
-    except RuntimeError as exc:
-        logger.exception("multi_agent_plan_failed")
-        audit({"trace_id":trace_id,"action":"plan","ok":False,"error_type":type(exc).__name__,"elapsed_ms":round((time.perf_counter()-started)*1000)})
-        return JSONResponse({"error":str(exc)}, status_code=502)
+    cache_key = _plan_cache_key(payload.session_id, payload.question, payload.schema_context, state.get("working_memory", {}))
+    cached_plan = _plan_cache.get(cache_key)
+    if cached_plan and time.monotonic() - cached_plan[0] <= PLAN_CACHE_TTL_SECONDS:
+        graph_result = dict(cached_plan[1])
+    else:
+        try:
+            graph_result = await MULTI_AGENT_GRAPH.ainvoke({"question":payload.question,"schema_context":payload.schema_context,"recent":recent,"working_memory":state.get("working_memory",{})})
+        except RuntimeError as exc:
+            logger.exception("multi_agent_plan_failed")
+            audit({"trace_id":trace_id,"action":"plan","ok":False,"error_type":type(exc).__name__,"elapsed_ms":round((time.perf_counter()-started)*1000)})
+            return JSONResponse({"error":str(exc)}, status_code=502)
+        _plan_cache[cache_key] = (time.monotonic(), dict(graph_result))
+        _plan_cache.move_to_end(cache_key)
+        while len(_plan_cache) > PLAN_CACHE_MAX_ENTRIES:
+            _plan_cache.popitem(last=False)
     workflow_id = uuid.uuid4().hex
     plan = graph_result.get("plan", {})
     signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
@@ -795,6 +847,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
             await save_working_memory_async(payload.session_id, state["working_memory"])
+            await save_context_summary_async(payload.session_id, state["history"])
             state.pop("pending_workflow", None)
             await clear_pending_workflow_async(payload.session_id)
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
@@ -837,6 +890,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
     await save_working_memory_async(payload.session_id, state["working_memory"])
+    await save_context_summary_async(payload.session_id, state["history"])
     state.pop("pending_workflow", None)
     await clear_pending_workflow_async(payload.session_id)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"answer_review_status":review.get("status"),"answer_repair_attempts":1 if review.get("status") in {"repaired_once", "repair_failed"} else 0,"elapsed_ms":round((time.perf_counter()-started)*1000)})
