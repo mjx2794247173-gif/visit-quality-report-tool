@@ -494,6 +494,35 @@ def save_working_memory(session_id: str, memory: dict[str, Any]) -> None:
     except sqlite3.Error:
         logger.warning("session_memory_save_failed")
 
+def save_pending_workflow(session_id: str, workflow: dict[str, Any]) -> None:
+    """Persist only hashes and identifiers; never persist the query plan itself."""
+    now = int(time.time())
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS pending_workflows (session_key TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, signature TEXT NOT NULL, updated_at INTEGER NOT NULL)")
+            connection.execute("DELETE FROM pending_workflows WHERE updated_at < ?", (now - MEMORY_TTL_SECONDS,))
+            connection.execute("INSERT INTO pending_workflows(session_key, workflow_id, signature, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(session_key) DO UPDATE SET workflow_id=excluded.workflow_id, signature=excluded.signature, updated_at=excluded.updated_at", (_session_memory_key(session_id), workflow["workflow_id"], workflow["signature"], now))
+    except sqlite3.Error:
+        logger.warning("pending_workflow_save_failed")
+
+def load_pending_workflow(session_id: str) -> dict[str, str] | None:
+    if not MEMORY_DB.exists():
+        return None
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            row = connection.execute("SELECT workflow_id, signature FROM pending_workflows WHERE session_key = ? AND updated_at >= ?", (_session_memory_key(session_id), int(time.time()) - MEMORY_TTL_SECONDS)).fetchone()
+        return {"workflow_id": row[0], "signature": row[1]} if row else None
+    except sqlite3.Error:
+        logger.warning("pending_workflow_load_failed")
+        return None
+
+def clear_pending_workflow(session_id: str) -> None:
+    try:
+        with sqlite3.connect(MEMORY_DB) as connection:
+            connection.execute("DELETE FROM pending_workflows WHERE session_key = ?", (_session_memory_key(session_id),))
+    except sqlite3.Error:
+        logger.warning("pending_workflow_clear_failed")
+
 
 def load_working_memory(session_id: str) -> dict[str, Any]:
     """Load and revalidate unexpired sanitized query state."""
@@ -520,6 +549,15 @@ async def load_working_memory_async(session_id: str) -> dict[str, Any]:
 
 async def save_working_memory_async(session_id: str, memory: dict[str, Any]) -> None:
     await asyncio.to_thread(save_working_memory, session_id, memory)
+
+async def save_pending_workflow_async(session_id: str, workflow: dict[str, Any]) -> None:
+    await asyncio.to_thread(save_pending_workflow, session_id, workflow)
+
+async def load_pending_workflow_async(session_id: str) -> dict[str, str] | None:
+    return await asyncio.to_thread(load_pending_workflow, session_id)
+
+async def clear_pending_workflow_async(session_id: str) -> None:
+    await asyncio.to_thread(clear_pending_workflow, session_id)
 
 
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
@@ -634,6 +672,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     plan = graph_result.get("plan", {})
     signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
     state["pending_workflow"] = {"workflow_id": workflow_id, "question": payload.question, "tool": graph_result["tool"], "plan": plan, "signature": signature}
+    await save_pending_workflow_async(payload.session_id, state["pending_workflow"])
     audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"workflow_id":workflow_id,"plan_signature":signature,"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":plan})
 
@@ -646,6 +685,11 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"缺少查询工作流绑定信息，请重新规划"}, status_code=409)
     state = sessions.get(payload.session_id)
     pending = state.get("pending_workflow") if state else None
+    persisted = await load_pending_workflow_async(payload.session_id)
+    if pending is None and persisted:
+        expected_signature = plan_signature(payload.session_id, payload.workflow_id, payload.question, str(payload.tool_result.get("tool") or ""), payload.plan)
+        if persisted.get("workflow_id") == payload.workflow_id and persisted.get("signature") == expected_signature:
+            pending = {**persisted, "question": payload.question, "tool": payload.tool_result.get("tool"), "plan": payload.plan}
     if not pending or pending.get("workflow_id") != payload.workflow_id or pending.get("signature") != payload.plan_signature:
         return JSONResponse({"error":"工具结果与当前查询计划不匹配，请重新规划"}, status_code=409)
     if pending.get("question") != payload.question or pending.get("plan") != payload.plan:
@@ -696,6 +740,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
             await save_working_memory_async(payload.session_id, state["working_memory"])
             state.pop("pending_workflow", None)
+            await clear_pending_workflow_async(payload.session_id)
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -729,6 +774,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
     await save_working_memory_async(payload.session_id, state["working_memory"])
     state.pop("pending_workflow", None)
+    await clear_pending_workflow_async(payload.session_id)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
