@@ -69,31 +69,48 @@ def build_jingme_message(analysis_result: dict[str, Any]) -> str:
             lines.append(f"{key}：{value}")
     if isinstance(analysis_result.get("ranking"), list):
         lines.append("问题类型排名：")
-        for index, item in enumerate(analysis_result["ranking"][:5], 1):
+        for index, item in enumerate(analysis_result["ranking"][:3], 1):
             if isinstance(item, dict):
                 label = item.get("issue_type") or item.get("type") or item.get("name") or "未命名"
                 count = item.get("count", item.get("visits", item.get("value", 0)))
-                lines.append(f"{index}. {label}：{count}")
+                lines.append(f"{index}. {str(label)[:60]}：{count}")
     if isinstance(analysis_result.get("stations"), list):
         lines.append("站长排名：")
-        for index, item in enumerate(analysis_result["stations"][:5], 1):
+        for index, item in enumerate(analysis_result["stations"][:3], 1):
             if isinstance(item, dict):
                 erp = item.get("erp", "匿名ERP")
                 visits = item.get("visits", item.get("count", 0))
-                lines.append(f"{index}. {erp}：{visits}")
+                lines.append(f"{index}. {str(erp)[:60]}：{visits}")
     if isinstance(analysis_result.get("problem_type_ranking"), list):
         lines.append("问题类型排名：")
-        for index, item in enumerate(analysis_result["problem_type_ranking"][:5], 1):
+        for index, item in enumerate(analysis_result["problem_type_ranking"][:3], 1):
             if isinstance(item, dict):
                 label = item.get("issue_type") or item.get("type") or item.get("name") or "未命名"
                 count = item.get("count", item.get("visits", item.get("value", 0)))
-                lines.append(f"{index}. {label}：{count}")
+                lines.append(f"{index}. {str(label)[:60]}：{count}")
     if analysis_result.get("disclaimer"):
         lines.append(str(analysis_result["disclaimer"]))
     text = "\n".join(lines)
-    if len(text) > MAX_MESSAGE_CHARS or len(text.encode("utf-8")) > MAX_MESSAGE_BYTES:
-        raise ValueError("京ME通报内容过长，请缩小统计范围后重试")
-    return text
+    if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
+        return text
+    # The disclaimer is useful in the web answer, but is not required for a
+    # compact notification because the title and deterministic fields remain.
+    compact_lines = [line for line in lines if line != str(analysis_result.get("disclaimer", ""))]
+    text = "\n".join(compact_lines)
+    if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
+        return text
+    # Keep the structured summary and the first few ranked results. Never
+    # slice arbitrary bytes or use model-generated numbers.
+    summary = compact_lines[:]
+    while len(summary) > 4:
+        candidate = "\n".join(summary)
+        if len(candidate) <= MAX_MESSAGE_CHARS and len(candidate.encode("utf-8")) <= MAX_MESSAGE_BYTES:
+            return candidate
+        summary.pop()
+    text = "\n".join(summary)
+    if len(text) <= MAX_MESSAGE_CHARS and len(text.encode("utf-8")) <= MAX_MESSAGE_BYTES:
+        return text
+    raise ValueError("京ME通报内容过长，请缩小统计范围后重试")
 
 
 class O2JingMeAdapter:
