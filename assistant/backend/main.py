@@ -137,6 +137,14 @@ class AnswerAssessment(BaseModel):
     is_complete: bool
     missing_parts: str = Field(default="", max_length=500)
 
+class WorkflowBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workflow_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    signature: str = Field(pattern=r"^[a-f0-9]{64}$")
+    question: str = Field(min_length=1, max_length=2000)
+    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"]
+    plan: dict[str, Any]
+
 
 class RetrievalRewrite(BaseModel):
     """A single supplemental search query produced after insufficient retrieval."""
@@ -512,12 +520,13 @@ def save_working_memory(session_id: str, memory: dict[str, Any]) -> None:
 
 def save_pending_workflow(session_id: str, workflow: dict[str, Any]) -> None:
     """Persist only hashes and identifiers; never persist the query plan itself."""
+    binding = WorkflowBinding.model_validate(workflow)
     now = int(time.time())
     try:
         with sqlite3.connect(MEMORY_DB) as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS pending_workflows (session_key TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, signature TEXT NOT NULL, updated_at INTEGER NOT NULL)")
             connection.execute("DELETE FROM pending_workflows WHERE updated_at < ?", (now - MEMORY_TTL_SECONDS,))
-            connection.execute("INSERT INTO pending_workflows(session_key, workflow_id, signature, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(session_key) DO UPDATE SET workflow_id=excluded.workflow_id, signature=excluded.signature, updated_at=excluded.updated_at", (_session_memory_key(session_id), workflow["workflow_id"], workflow["signature"], now))
+            connection.execute("INSERT INTO pending_workflows(session_key, workflow_id, signature, updated_at) VALUES(?, ?, ?, ?) ON CONFLICT(session_key) DO UPDATE SET workflow_id=excluded.workflow_id, signature=excluded.signature, updated_at=excluded.updated_at", (_session_memory_key(session_id), binding.workflow_id, binding.signature, now))
     except sqlite3.Error:
         logger.warning("pending_workflow_save_failed")
 
@@ -718,7 +727,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     workflow_id = uuid.uuid4().hex
     plan = graph_result.get("plan", {})
     signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
-    state["pending_workflow"] = {"workflow_id": workflow_id, "question": payload.question, "tool": graph_result["tool"], "plan": plan, "signature": signature}
+    state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool=graph_result["tool"], plan=plan, signature=signature).model_dump()
     await save_pending_workflow_async(payload.session_id, state["pending_workflow"])
     audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"workflow_id":workflow_id,"plan_signature":signature,"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":plan})
