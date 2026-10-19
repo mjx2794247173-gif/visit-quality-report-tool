@@ -585,6 +585,14 @@ def normalize_spreadsheet_limit(question: str, limit: int) -> int:
     singular = re.search(r"哪个|哪位|谁是|是谁", question)
     return 1 if singular and not explicit_top_n else limit
 
+def normalize_issue_type(question: str, issue_type: str | None) -> str | None:
+    """Keep only an explicitly named CRM issue type; generic labels stay unfiltered."""
+    if issue_type and issue_type not in question:
+        return None
+    if issue_type in {"虚假", "违规", "虚假拜访"}:
+        return None
+    return issue_type
+
 
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
@@ -596,9 +604,7 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
     plan = query_plan.model_dump()
     plan["limit"] = normalize_spreadsheet_limit(state["question"], plan["limit"])
     filters = plan["filters"]
-    issue_type = filters["issue_type"]
-    if issue_type and str(issue_type) not in state["question"]:
-        filters["issue_type"] = None
+    filters["issue_type"] = normalize_issue_type(state["question"], filters["issue_type"])
     plan["filters"] = filters
     return {**state, "tool": tool, "plan": plan}
 
