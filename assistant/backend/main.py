@@ -132,6 +132,11 @@ class RetrievalAssessment(BaseModel):
     is_sufficient: bool
     missing_information: str = Field(max_length=500)
 
+class AnswerAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    is_complete: bool
+    missing_parts: str = Field(default="", max_length=500)
+
 
 class RetrievalRewrite(BaseModel):
     """A single supplemental search query produced after insufficient retrieval."""
@@ -782,6 +787,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         logger.exception("answer_model_response_invalid")
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"status":"invalid_model_response","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"模型返回格式异常，请重试"}, status_code=502)
+    review = await review_answer(payload.question, payload.plan, result, answer)
     history_result = result.get("rows",[])[:10] if isinstance(result.get("rows"), list) else {"tool":tool_name}
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
@@ -789,7 +795,31 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state.pop("pending_workflow", None)
     await clear_pending_workflow_async(payload.session_id)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
-    return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
+    return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True},"answer_review":review})
+
+async def review_answer(question: str, plan: dict[str, Any], result: dict[str, Any], answer: str) -> dict[str, Any]:
+    """Run a bounded, read-only completeness check after answer generation."""
+    if not API_KEY:
+        return {"is_complete": True, "missing_parts": "", "status": "skipped_no_api_key"}
+    prompt = {
+        "question": question,
+        "plan": plan,
+        "verified_result": result,
+        "answer": answer,
+        "rule": "只检查答案是否覆盖用户问题、计划条件和确定性结果；不得补充事实，不得重算数字。",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":'你是回答完整性验收器，只输出 JSON：{"is_complete":true或false,"missing_parts":"缺失内容"}。'},{"role":"user","content":json.dumps(prompt,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":300})
+        if response.status_code >= 400:
+            return {"is_complete": True, "missing_parts": "", "status": "review_failed"}
+        content = response.json()["choices"][0]["message"].get("content", "").strip()
+        parsed = AnswerAssessment.model_validate(json.loads(content)).model_dump()
+        parsed["status"] = "reviewed"
+        return parsed
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
+        logger.warning("answer_review_failed")
+        return {"is_complete": True, "missing_parts": "", "status": "review_failed"}
 
 
 async def call_deepseek(question: str, context: str, knowledge: list[dict[str, str]], tool_result: dict[str, Any] | None = None) -> tuple[str, list[str]]:
