@@ -6,7 +6,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, reciprocal_rank_fusion, retrieve, retrieve_async, save_working_memory, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, filter_ranked_sources, load_working_memory, merge_retrieval_sources, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_working_memory, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -239,6 +239,15 @@ def test_answer_trace_id_must_be_anonymous_hex_identifier():
     assert AnswerRequest.model_validate({**payload, "trace_id":"a" * 32}).trace_id == "a" * 32
     with pytest.raises(ValidationError):
         AnswerRequest.model_validate({**payload, "trace_id":"customer-name"})
+
+
+def test_plan_signature_is_stable_and_changes_when_plan_changes():
+    base = {"filters": {"province": "广东省区"}, "group_by": "station_erp", "metric": "visit_count", "order": "desc", "limit": 5}
+    first = plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", base)
+    assert first == plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", dict(base))
+    assert len(first) == 64
+    changed = {**base, "limit": 4}
+    assert first != plan_signature("a" * 32, "b" * 32, "问题", "spreadsheet_query", changed)
 
 
 def test_working_memory_keeps_only_validated_query_conditions():

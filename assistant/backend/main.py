@@ -74,6 +74,8 @@ class AnswerRequest(BaseModel):
     tool_result: dict[str, Any]
     session_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     trace_id: str = Field(default="", pattern=r"^[a-f0-9]{32}$")
+    workflow_id: str = Field(default="", pattern=r"^(|[a-f0-9]{32})$")
+    plan_signature: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
 
 class FeishuSendRequest(BaseModel):
@@ -587,6 +589,13 @@ def _next_agent(state: MultiAgentState) -> str:
     return state["agent"]
 
 
+def plan_signature(session_id: str, workflow_id: str, question: str, tool: str, plan: dict[str, Any]) -> str:
+    """Create a stable binding for one browser-executed plan."""
+    material = {"session_id": session_id, "workflow_id": workflow_id, "question": question, "tool": tool, "plan": plan}
+    encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 _multi_agent_builder = StateGraph(MultiAgentState)
 _multi_agent_builder.add_node("supervisor_agent", supervisor_agent)
 _multi_agent_builder.add_node("data_agent", data_agent)
@@ -621,15 +630,34 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
         logger.exception("multi_agent_plan_failed")
         audit({"trace_id":trace_id,"action":"plan","ok":False,"error_type":type(exc).__name__,"elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":str(exc)}, status_code=502)
+    workflow_id = uuid.uuid4().hex
+    plan = graph_result.get("plan", {})
+    signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan)
+    state["pending_workflow"] = {"workflow_id": workflow_id, "question": payload.question, "tool": graph_result["tool"], "plan": plan, "signature": signature}
     audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":graph_result["agent"],"tool":graph_result["tool"],"elapsed_ms":round((time.perf_counter()-started)*1000)})
-    return JSONResponse({"trace_id":trace_id,"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":graph_result.get("plan",{})})
+    return JSONResponse({"trace_id":trace_id,"workflow_id":workflow_id,"plan_signature":signature,"agent":graph_result["agent"],"tool":graph_result["tool"],"plan":plan})
 
 @app.post("/api/answer")
 async def answer_query(payload: AnswerRequest) -> JSONResponse:
     started = time.perf_counter()
     trace_id = payload.trace_id or uuid.uuid4().hex
     result = payload.tool_result
+    if not payload.workflow_id or not payload.plan_signature:
+        return JSONResponse({"error":"缺少查询工作流绑定信息，请重新规划"}, status_code=409)
+    state = sessions.get(payload.session_id)
+    pending = state.get("pending_workflow") if state else None
+    if not pending or pending.get("workflow_id") != payload.workflow_id or pending.get("signature") != payload.plan_signature:
+        return JSONResponse({"error":"工具结果与当前查询计划不匹配，请重新规划"}, status_code=409)
+    if pending.get("question") != payload.question or pending.get("plan") != payload.plan:
+        return JSONResponse({"error":"查询问题或计划与工作流不一致，请重新规划"}, status_code=409)
     tool_name = str(result.get("tool") or "")
+    if tool_name != pending.get("tool"):
+        return JSONResponse({"error":"工具结果类型与查询计划不一致"}, status_code=422)
+    if tool_name == "spreadsheet_query":
+        scope = result.get("scope") if isinstance(result.get("scope"), dict) else {}
+        expected = payload.plan
+        if any(scope.get(key) != expected.get(key) for key in ("filters", "group_by", "metric", "order", "limit")):
+            return JSONResponse({"error":"表格工具结果的查询条件与计划不一致"}, status_code=422)
     if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
         return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
     if tool_name == "spreadsheet_query":
@@ -671,6 +699,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":{"tool":tool_name,"sufficient":False},"answer":answer}])[-6:]
             state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
             await save_working_memory_async(payload.session_id, state["working_memory"])
+            state.pop("pending_workflow", None)
             audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(sources),"retrieval_attempts":retrieval_attempts,"rerank_applied":rerank_applied,"relevance_filter_applied":relevance_filter_applied,"sufficient":False,"elapsed_ms":round((time.perf_counter()-started)*1000)})
             return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True,"sufficient":False}})
     if tool_name == "feishu_publish_preview":
@@ -703,6 +732,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
     await save_working_memory_async(payload.session_id, state["working_memory"])
+    state.pop("pending_workflow", None)
     audit({"trace_id":trace_id,"action":"answer","ok":True,"tool":tool_name,"validated":True,"source_count":len(result.get("sources",[])) if isinstance(result.get("sources"),list) else 0,"retrieval_attempts":result.get("retrieval_attempts"),"rerank_applied":result.get("rerank_applied"),"relevance_filter_applied":result.get("relevance_filter_applied"),"sufficient":(result.get("assessment") or {}).get("is_sufficient") if isinstance(result.get("assessment"),dict) else None,"elapsed_ms":round((time.perf_counter()-started)*1000)})
     return JSONResponse({"trace_id":trace_id,"answer":answer,"tool":tool_name,"tool_result":result,"validation":{"valid":True}})
 
