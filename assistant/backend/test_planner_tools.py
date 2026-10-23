@@ -3,12 +3,13 @@ import asyncio
 import json
 import sqlite3
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -81,6 +82,18 @@ def test_page_refresh_starts_a_new_backend_session():
 
     assert "let SESSION_ID=newSessionId();" in page
     assert "localStorage.getItem('visit-quality-session-id')" not in page
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("生成本周报告", ("2026-10-19", "2026-10-25")),
+    ("看看上周问题", ("2026-10-12", "2026-10-18")),
+    ("昨天有多少条", ("2026-10-22", "2026-10-22")),
+    ("统计本月", ("2026-10-01", "2026-10-31")),
+])
+def test_relative_dates_are_resolved_deterministically(question, expected):
+    normalized = normalize_relative_date_filters(question, {}, datetime(2026, 10, 23, 9, 0))
+
+    assert (normalized["date_from"], normalized["date_to"]) == expected
 
 
 def test_spreadsheet_plan_normalizes_optional_filters():

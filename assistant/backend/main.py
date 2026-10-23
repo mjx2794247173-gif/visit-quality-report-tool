@@ -770,6 +770,31 @@ def normalize_issue_type(question: str, issue_type: str | None) -> str | None:
     return issue_type
 
 
+def normalize_relative_date_filters(question: str, filters: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+    """Resolve common relative dates deterministically instead of trusting model arithmetic."""
+    normalized = dict(filters)
+    today = (now or datetime.now().astimezone()).date()
+    start = end = None
+    if re.search(r"本周|这周|本星期|这个星期", question):
+        start = today - timedelta(days=today.weekday())
+        end = start + timedelta(days=6)
+    elif re.search(r"上周|上星期", question):
+        end = today - timedelta(days=today.weekday() + 1)
+        start = end - timedelta(days=6)
+    elif re.search(r"昨天|昨日", question):
+        start = end = today - timedelta(days=1)
+    elif re.search(r"今天|今日|当天", question):
+        start = end = today
+    elif re.search(r"本月|这个月", question):
+        start = today.replace(day=1)
+        next_month = (start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1))
+        end = next_month - timedelta(days=1)
+    if start and end:
+        normalized["date_from"] = start.isoformat()
+        normalized["date_to"] = end.isoformat()
+    return normalized
+
+
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
     tool, raw_plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
@@ -781,6 +806,7 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
     plan["limit"] = normalize_spreadsheet_limit(state["question"], plan["limit"])
     filters = plan["filters"]
     filters["issue_type"] = normalize_issue_type(state["question"], filters["issue_type"])
+    filters = normalize_relative_date_filters(state["question"], filters)
     plan["filters"] = filters
     return {**state, "tool": tool, "plan": plan}
 
