@@ -7,7 +7,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -60,6 +60,19 @@ def test_supervisor_decision_accepts_only_registered_agents():
 def test_supervisor_decision_requires_agent_field():
     with pytest.raises(ValidationError):
         AgentDecision.model_validate({})
+
+
+def test_general_chat_is_valid_across_workflow_and_memory_contracts():
+    binding = WorkflowBinding.model_validate({
+        "workflow_id": "a" * 32,
+        "signature": "b" * 64,
+        "question": "2026年10月15日是星期几？",
+        "tool": "general_chat",
+        "plan": {},
+    })
+    memory = WorkingMemory.model_validate({"last_tool": "general_chat"})
+    assert binding.tool == "general_chat"
+    assert memory.last_tool == "general_chat"
 
 
 def test_spreadsheet_plan_normalizes_optional_filters():
