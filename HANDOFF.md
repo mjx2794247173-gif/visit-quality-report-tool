@@ -15,7 +15,7 @@
 → 通用语义解释器（只理解，不回答、不计算）
 → Pydantic 意图校验
 → LangGraph Supervisor 确定性路由
-→ data / knowledge / quality / publishing / refinement / out_of_scope Agent
+→ data / knowledge / quality / publishing / refinement / clarification / out_of_scope Agent
 → Function Calling 生成白名单计划
 → 浏览器执行当前 Excel 查询或后端执行知识检索
 → FastAPI 校验结果
@@ -27,7 +27,7 @@
 
 ## 已完成进展
 
-1. 通用语义解释器、确定性 Supervisor、六执行分支的 LangGraph 路由和严格 Function Calling。
+1. 通用语义解释器、确定性 Supervisor、七执行分支的 LangGraph 路由和严格 Function Calling。
 2. Pydantic 校验结构化意图、查询计划、知识充分性、改写与重排结果。
 3. 混合 RAG：关键词检索、向量检索、RRF、Rerank、相关性过滤。
 4. 独立的知识资料充分性审查：审查模型只能依据检索片段输出 `is_sufficient` 和 `missing_information`；不得直接回答或使用自身知识补全。

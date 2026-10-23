@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AnswerRequest, EmptyToolPlan, IntentInterpretation, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, PlanRequest, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, merge_validated_intent_into_spreadsheet_plan, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_query, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
+from assistant.backend.main import AnswerRequest, EmptyToolPlan, IntentInterpretation, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, PlanRequest, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, merge_validated_intent_into_spreadsheet_plan, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_query, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory, validate_intent_node
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -19,6 +19,7 @@ def test_planner_exposes_distinct_safe_capabilities():
         "data_quality_check",
         "feishu_publish_preview",
         "answer_refinement",
+        "clarification",
         "out_of_scope",
     }
 
@@ -51,6 +52,7 @@ def test_langgraph_contains_supervisor_and_specialist_agents():
         "intent_interpreter",
         "validate_intent",
         "refinement_agent",
+        "clarification_agent",
         "out_of_scope_agent",
     } <= nodes
 
@@ -95,6 +97,44 @@ def test_validated_intent_is_merged_into_data_plan_without_inventing_filters():
     assert merged["filters"]["date_from"] <= merged["filters"]["date_to"]
     assert merged["group_by"] == "issue_type"
     assert merged["order"] == "desc"
+
+
+def test_multi_province_comparison_keeps_every_explicit_scope():
+    intent = {
+        "domain": "data", "operation": "compare",
+        "filters": {"provinces": ["广东省区", "浙江省区"]},
+        "groupings": ["province"], "metric": "visit_count", "order": "desc", "limit": 10,
+        "presentation_style": None, "presentation_audience": None,
+        "uses_previous_query": False, "uses_previous_answer": False, "missing_information": [],
+    }
+    merged = merge_validated_intent_into_spreadsheet_plan(
+        "比较广东和浙江各类问题",
+        {"provinces": ["广东省区", "浙江省区", "江苏省区"]}, intent,
+        {"filters": {}, "group_by": "province", "metric": "visit_count", "order": "desc", "limit": 10},
+    )
+    assert merged["filters"]["province"] is None
+    assert merged["filters"]["provinces"] == ["广东省区", "浙江省区"]
+
+
+def test_relative_and_explicit_date_ranges_are_deterministic():
+    now = datetime(2026, 10, 23, 9, 0)
+    assert normalize_relative_date_filters("最近三天的问题", {}, now) == {
+        "date_from": "2026-10-21", "date_to": "2026-10-23",
+    }
+    assert normalize_relative_date_filters("10月15号到20号", {}, now) == {
+        "date_from": "2026-10-15", "date_to": "2026-10-20",
+    }
+
+
+def test_missing_previous_answer_becomes_clarification():
+    intent = {
+        "domain": "refinement", "operation": "refine", "filters": {}, "groupings": [],
+        "metric": None, "order": None, "limit": None, "presentation_style": "三段",
+        "presentation_audience": None, "uses_previous_query": False,
+        "uses_previous_answer": True, "missing_information": [],
+    }
+    state = asyncio.run(validate_intent_node({"question": "把结果写成三段", "intent": intent, "recent": [], "working_memory": {}}))
+    assert state["intent"]["domain"] == "clarification"
 
 
 def test_page_refresh_starts_a_new_backend_session():

@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
@@ -93,17 +93,23 @@ class FeishuSendRequest(BaseModel):
 class IntentFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
     province: str | None = None
+    provinces: list[str] = Field(default_factory=list, max_length=10)
     date_expression: str | None = None
     date_from: str | None = None
     date_to: str | None = None
     station_erp: str | None = None
     issue_type: str | None = None
 
+    @field_validator("provinces", mode="before")
+    @classmethod
+    def normalize_null_provinces(cls, value: Any) -> list[str]:
+        return [] if value is None else value
+
 
 class IntentInterpretation(BaseModel):
     """General semantic layer shared by every specialist Agent."""
     model_config = ConfigDict(extra="forbid")
-    domain: Literal["data", "knowledge", "quality", "publishing", "refinement", "out_of_scope"]
+    domain: Literal["data", "knowledge", "quality", "publishing", "refinement", "clarification", "out_of_scope"]
     operation: Literal["query", "compare", "summarize", "explain", "check", "publish", "refine", "clarify"]
     filters: IntentFilters = Field(default_factory=IntentFilters)
     groupings: list[Literal["station_erp", "issue_type", "province", "date", "customer"]] = Field(default_factory=list, max_length=5)
@@ -121,10 +127,16 @@ class SpreadsheetFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     province: str | None = None
+    provinces: list[str] = Field(default_factory=list, max_length=10)
     date_from: str | None = None
     date_to: str | None = None
     station_erp: str | None = None
     issue_type: str | None = None
+
+    @field_validator("provinces", mode="before")
+    @classmethod
+    def normalize_null_provinces(cls, value: Any) -> list[str]:
+        return [] if value is None else value
 
 
 class SpreadsheetPlan(BaseModel):
@@ -168,7 +180,7 @@ class WorkflowBinding(BaseModel):
     workflow_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     signature: str = Field(pattern=r"^[a-f0-9]{64}$")
     question: str = Field(min_length=1, max_length=2000)
-    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"]
+    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "clarification", "out_of_scope"]
     plan: dict[str, Any]
     file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
@@ -192,7 +204,7 @@ class WorkingMemory(BaseModel):
     """Sanitized rolling query state; never contains CRM rows or answer text."""
 
     model_config = ConfigDict(extra="forbid")
-    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"] | None = None
+    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "clarification", "out_of_scope"] | None = None
     filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
     group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"] | None = None
     metric: Literal["visit_count", "distinct_visit_count", "distinct_issue_type_count", "distinct_date_count", "distinct_customer_count"] | None = None
@@ -443,19 +455,21 @@ RETRIEVAL_REWRITE_TOOL = {"type":"function","function":{"name":"submit_rewritten
 
 RETRIEVAL_RANKING_TOOL = {"type":"function","function":{"name":"submit_source_ranking","description":"按相关性重排全部已有资料编号，并标出与问题直接相关的排序前缀；不新增资料，不回答问题。","parameters":{"type":"object","properties":{"ranked_indices":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"maxItems":10},"relevant_indices":{"type":"array","items":{"type":"integer","minimum":0},"maxItems":10}},"required":["ranked_indices","relevant_indices"],"additionalProperties":False}}}
 
-SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。‘虚假/违规’不是具体问题类型，除非用户明确说出 schema 中存在的质检问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
+SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。比较多个省区时使用 provinces；单省区使用 province。‘虚假/违规’不是具体问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"provinces":{"type":"array","items":{"type":"string"},"maxItems":10},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
 DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","description":"检查当前上传 Excel 的必需字段、空值、日期范围和可分析记录数。用户问文件是否完整、字段是否缺失、为什么无法分析时使用。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
 FEISHU_PREVIEW_TOOL = {"type":"function","function":{"name":"feishu_publish_preview","description":"为最近一次回答生成飞书发布预览。用户明确说发送、推送、发到飞书时使用；此工具只准备内容，页面仍需用户确认。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-INTENT_INTERPRETATION_TOOL = {"type":"function","function":{"name":"submit_intent","description":"把用户自然语言完整解释为可校验的业务意图，不回答问题、不计算数据。","parameters":{"type":"object","properties":{"domain":{"type":"string","enum":["data","knowledge","quality","publishing","refinement","out_of_scope"]},"operation":{"type":"string","enum":["query","compare","summarize","explain","check","publish","refine","clarify"]},"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_expression":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"groupings":{"type":"array","items":{"type":"string","enum":["station_erp","issue_type","province","date","customer"]},"maxItems":5},"metric":{"type":["string","null"],"enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count",None]},"order":{"type":["string","null"],"enum":["desc","asc",None]},"limit":{"type":["integer","null"],"minimum":1,"maximum":50},"presentation_style":{"type":["string","null"]},"presentation_audience":{"type":["string","null"]},"uses_previous_query":{"type":"boolean"},"uses_previous_answer":{"type":"boolean"},"missing_information":{"type":"array","items":{"type":"string"},"maxItems":5}},"required":["domain","operation","filters","groupings","metric","order","limit","presentation_style","presentation_audience","uses_previous_query","uses_previous_answer","missing_information"],"additionalProperties":False}}}
+INTENT_INTERPRETATION_TOOL = {"type":"function","function":{"name":"submit_intent","description":"把用户自然语言完整解释为可校验的业务意图，不回答问题、不计算数据。","parameters":{"type":"object","properties":{"domain":{"type":"string","enum":["data","knowledge","quality","publishing","refinement","clarification","out_of_scope"]},"operation":{"type":"string","enum":["query","compare","summarize","explain","check","publish","refine","clarify"]},"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"provinces":{"type":"array","items":{"type":"string"},"maxItems":10},"date_expression":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"groupings":{"type":"array","items":{"type":"string","enum":["station_erp","issue_type","province","date","customer"]},"maxItems":5},"metric":{"type":["string","null"],"enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count",None]},"order":{"type":["string","null"],"enum":["desc","asc",None]},"limit":{"type":["integer","null"],"minimum":1,"maximum":50},"presentation_style":{"type":["string","null"]},"presentation_audience":{"type":["string","null"]},"uses_previous_query":{"type":"boolean"},"uses_previous_answer":{"type":"boolean"},"missing_information":{"type":"array","items":{"type":"string"},"maxItems":5}},"required":["domain","operation","filters","groupings","metric","order","limit","presentation_style","presentation_audience","uses_previous_query","uses_previous_answer","missing_information"],"additionalProperties":False}}}
 
 ANSWER_REFINEMENT_TOOL = {"type":"function","function":{"name":"answer_refinement","description":"只改写上一条已校验答案，不重新计算数据。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
+CLARIFICATION_TOOL = {"type":"function","function":{"name":"clarification","description":"请求引用了当前会话中不存在的上一条结果或缺少执行所需关键信息，需要向用户说明缺少什么。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
+
 OUT_OF_SCOPE_TOOL = {"type":"function","function":{"name":"out_of_scope","description":"请求与拜访质量分析、规则、文件检查、发布或上一条回答改写无关。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL, ANSWER_REFINEMENT_TOOL, OUT_OF_SCOPE_TOOL]
+PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL, ANSWER_REFINEMENT_TOOL, CLARIFICATION_TOOL, OUT_OF_SCOPE_TOOL]
 
 class MultiAgentState(TypedDict, total=False):
     question: str
@@ -469,25 +483,32 @@ class MultiAgentState(TypedDict, total=False):
 
 
 async def _function_call(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
-    """Ask DeepSeek for exactly one tool call and return its validated envelope."""
-    try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(
-                "https://api.deepseek.com/chat/completions",
-                headers={"Authorization": f"Bearer {API_KEY}"},
-                json={"model": MODEL, "messages": messages, "tools": tools, "tool_choice": "required", "thinking": {"type": "disabled"}, "stream": False, "max_tokens": 600},
-            )
-    except httpx.HTTPError as exc:
-        raise RuntimeError("模型服务暂时不可用，请稍后重试") from exc
-    if response.status_code >= 400:
-        raise RuntimeError(upstream_error(response, "模型工具调用失败，请稍后重试"))
-    try:
-        call = (response.json()["choices"][0]["message"].get("tool_calls") or [])[0]
-        name = str(call["function"]["name"])
-        arguments = json.loads(call["function"].get("arguments") or "{}")
-    except (ValueError, TypeError, KeyError, IndexError) as exc:
-        raise RuntimeError("模型返回的工具调用格式异常，请重试") from exc
-    return name, arguments if isinstance(arguments, dict) else {}
+    """Ask DeepSeek for one tool call, retrying once on a malformed envelope."""
+    attempt_messages = list(messages)
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=45) as client:
+                response = await client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={"Authorization": f"Bearer {API_KEY}"},
+                    json={"model": MODEL, "messages": attempt_messages, "tools": tools, "tool_choice": "required", "thinking": {"type": "disabled"}, "stream": False, "max_tokens": 800},
+                )
+        except httpx.HTTPError as exc:
+            raise RuntimeError("模型服务暂时不可用，请稍后重试") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(upstream_error(response, "模型工具调用失败，请稍后重试"))
+        try:
+            call = (response.json()["choices"][0]["message"].get("tool_calls") or [])[0]
+            name = str(call["function"]["name"])
+            arguments = json.loads(call["function"].get("arguments") or "{}")
+            if not isinstance(arguments, dict):
+                raise TypeError("tool arguments must be an object")
+            return name, arguments
+        except (ValueError, TypeError, KeyError, IndexError):
+            if attempt == 0:
+                attempt_messages = messages + [{"role":"user","content":"上一次没有返回合法工具调用。请严格调用且只调用一个给定工具，arguments 必须是 JSON 对象。"}]
+                continue
+    raise RuntimeError("模型返回的工具调用格式异常，请重试")
 
 
 async def assess_retrieval_sufficiency(question: str, sources: list[dict[str, str]]) -> RetrievalAssessment:
@@ -590,7 +611,7 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
             order=query_plan.order,
             limit=query_plan.limit,
         )
-    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
+    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "clarification", "out_of_scope"}:
         memory.last_tool = tool
     return memory.model_dump(exclude_none=True)
 
@@ -780,27 +801,37 @@ async def clear_pending_workflow_async(session_id: str) -> None:
 
 async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
     messages = [
-        {"role":"system","content":"你是拜访质量助手的通用语义解释器，不回答问题、不计算数字。理解用户完整意图、上下文引用、筛选条件、分组、指标、排序、Top N和表达要求，调用 submit_intent。CRM数据查询为data；规则字段口径为knowledge；文件完整性为quality；发送发布为publishing；明确要求改写上一条答案为refinement；完全无关才为out_of_scope。常识用于理解业务表达，例如本周、领导汇报、换成浙江，不应因此判为out_of_scope。不得把虚假/违规自动映射成具体问题类型。"},
+        {"role":"system","content":"你是拜访质量助手的通用语义解释器，不回答问题、不计算数字。理解用户完整意图、上下文引用、筛选条件、分组、指标、排序、Top N和表达要求，调用 submit_intent。CRM数据查询为data；规则字段口径为knowledge；文件完整性为quality；发送发布为publishing；明确要求改写已有上一条答案为refinement；引用不存在的上一条结果或缺少必要条件为clarification；完全无关才为out_of_scope。比较多个省区时填写 filters.provinces，不要只保留一个。常识用于理解业务表达，例如本周、领导汇报、换成浙江，不应因此判为out_of_scope。不得把虚假/违规自动映射成具体问题类型。"},
         {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
-    _, arguments = await _function_call(messages, [INTENT_INTERPRETATION_TOOL])
-    try:
-        intent = IntentInterpretation.model_validate(arguments)
-    except Exception as exc:
-        raise RuntimeError("通用语义解释器返回了无效意图，请重试") from exc
+    intent = None
+    for attempt in range(2):
+        _, arguments = await _function_call(messages, [INTENT_INTERPRETATION_TOOL])
+        try:
+            intent = IntentInterpretation.model_validate(arguments)
+            break
+        except Exception:
+            if attempt == 0:
+                messages = messages + [{"role":"user","content":"上一次意图参数不符合给定 JSON Schema。请重新调用 submit_intent，所有 required 字段都必须提供，数组不得使用 null。"}]
+    if intent is None:
+        raise RuntimeError("通用语义解释器返回了无效意图，请重试")
     return {**state, "intent": intent.model_dump()}
 
 
 async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
     intent = IntentInterpretation.model_validate(state.get("intent") or {})
     if intent.domain == "refinement" and not answer_refinement_source(state.get("recent", []), state["question"]):
+        intent.domain = "clarification"
         intent.missing_information = ["当前会话没有可改写的上一条答案"]
+    if intent.uses_previous_query and not state.get("working_memory", {}).get("last_tool"):
+        intent.domain = "clarification"
+        intent.missing_information = ["当前会话没有可继续使用的上一轮查询条件"]
     return {**state, "intent": intent.model_dump()}
 
 
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
     domain = IntentInterpretation.model_validate(state["intent"]).domain
-    mapping = {"data":"data_agent", "knowledge":"knowledge_agent", "quality":"quality_agent", "publishing":"publishing_agent", "refinement":"refinement_agent", "out_of_scope":"out_of_scope_agent"}
+    mapping = {"data":"data_agent", "knowledge":"knowledge_agent", "quality":"quality_agent", "publishing":"publishing_agent", "refinement":"refinement_agent", "clarification":"clarification_agent", "out_of_scope":"out_of_scope_agent"}
     return {**state, "agent": mapping[domain]}
 
 
@@ -836,12 +867,36 @@ def normalize_province_filter(question: str, province: str | None, schema_contex
     return province if any(alias and alias in question for alias in aliases) else None
 
 
+def normalize_province_filters(question: str, schema_context: dict[str, Any], *candidates: str) -> tuple[str | None, list[str]]:
+    """Resolve every explicitly mentioned province; selected UI scope remains singular."""
+    default_scope = str(schema_context.get("default_scope") or "").strip()
+    if default_scope and default_scope != "全部省区":
+        return default_scope, []
+    available = [str(item).strip() for item in schema_context.get("provinces", []) if str(item).strip()]
+    pool = list(dict.fromkeys(available + [item for item in candidates if item]))
+    matched = []
+    for province in pool:
+        aliases = {province, province.replace("省区", ""), province.replace("地区", "")}
+        if any(alias and alias in question for alias in aliases):
+            matched.append(province)
+    matched = list(dict.fromkeys(matched))
+    return (matched[0], []) if len(matched) == 1 else (None, matched)
+
+
 def normalize_relative_date_filters(question: str, filters: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     """Resolve common relative dates deterministically instead of trusting model arithmetic."""
     normalized = dict(filters)
     today = (now or datetime.now().astimezone()).date()
     start = end = None
-    if re.search(r"本周|这周|本星期|这个星期", question):
+    recent_match = re.search(r"最近\s*([一二三四五六七八九十\d]+)\s*天", question)
+    chinese_numbers = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
+    if recent_match:
+        token = recent_match.group(1)
+        days = int(token) if token.isdigit() else chinese_numbers.get(token, 0)
+        if 1 <= days <= 31:
+            end = today
+            start = today - timedelta(days=days - 1)
+    elif re.search(r"本周|这周|本星期|这个星期", question):
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=6)
     elif re.search(r"上周|上星期", question):
@@ -855,6 +910,17 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
         start = today.replace(day=1)
         next_month = (start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1))
         end = next_month - timedelta(days=1)
+    else:
+        explicit = re.search(r"(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]?\s*(?:到|至|—|-)\s*(?:(\d{1,2})月)?(\d{1,2})[日号]?", question)
+        if explicit:
+            year = int(explicit.group(1) or today.year)
+            month_from = int(explicit.group(2))
+            month_to = int(explicit.group(4) or month_from)
+            try:
+                start = datetime(year, month_from, int(explicit.group(3))).date()
+                end = datetime(year, month_to, int(explicit.group(5))).date()
+            except ValueError:
+                start = end = None
     if start and end:
         normalized["date_from"] = start.isoformat()
         normalized["date_to"] = end.isoformat()
@@ -872,10 +938,10 @@ def merge_validated_intent_into_spreadsheet_plan(
     merged = SpreadsheetPlan.model_validate(plan).model_dump()
     filters = merged["filters"]
     interpreted = intent.filters.model_dump()
-    province = interpreted.get("province") or filters.get("province")
+    province_candidates = [interpreted.get("province"), filters.get("province"), *interpreted.get("provinces", []), *filters.get("provinces", [])]
     issue_type = interpreted.get("issue_type") or filters.get("issue_type")
     station_erp = interpreted.get("station_erp") or filters.get("station_erp")
-    filters["province"] = normalize_province_filter(question, province, schema_context)
+    filters["province"], filters["provinces"] = normalize_province_filters(question, schema_context, *[item for item in province_candidates if item])
     filters["issue_type"] = normalize_issue_type(question, issue_type)
     filters["station_erp"] = station_erp if station_erp and station_erp in question else filters.get("station_erp")
     for key in ("date_from", "date_to"):
@@ -896,11 +962,19 @@ def merge_validated_intent_into_spreadsheet_plan(
 
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
-    tool, raw_plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
-    try:
-        query_plan = SpreadsheetPlan.model_validate(raw_plan)
-    except Exception as exc:
-        raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试") from exc
+    messages = _agent_messages(state, instruction)
+    query_plan = None
+    tool = "spreadsheet_query"
+    for attempt in range(2):
+        tool, raw_plan = await _function_call(messages, [SPREADSHEET_QUERY_TOOL])
+        try:
+            query_plan = SpreadsheetPlan.model_validate(raw_plan)
+            break
+        except Exception:
+            if attempt == 0:
+                messages = messages + [{"role":"user","content":"上一次查询参数不符合 JSON Schema。请重新调用 spreadsheet_query；filters.provinces 必须是数组，其他字段使用规定枚举。"}]
+    if query_plan is None:
+        raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试")
     plan = merge_validated_intent_into_spreadsheet_plan(
         state["question"], state.get("schema_context", {}), state["intent"], query_plan.model_dump()
     )
@@ -938,6 +1012,10 @@ async def refinement_agent(state: MultiAgentState) -> MultiAgentState:
     return {**state, "tool": "answer_refinement", "plan": {}}
 
 
+async def clarification_agent(state: MultiAgentState) -> MultiAgentState:
+    return {**state, "tool": "clarification", "plan": {}}
+
+
 async def out_of_scope_agent(state: MultiAgentState) -> MultiAgentState:
     return {**state, "tool": "out_of_scope", "plan": {}}
 
@@ -949,7 +1027,7 @@ async def validate_plan_node(state: MultiAgentState) -> MultiAgentState:
     """Explicit graph boundary for validating the selected tool and plan."""
     tool = state.get("tool")
     plan = state.get("plan")
-    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
+    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "clarification", "out_of_scope"}:
         raise RuntimeError("Agent 选择了不受支持的工具")
     if not isinstance(plan, dict):
         raise RuntimeError("Agent 返回了无效的查询计划")
@@ -978,6 +1056,7 @@ _multi_agent_builder.add_node("knowledge_agent", knowledge_agent)
 _multi_agent_builder.add_node("quality_agent", quality_agent)
 _multi_agent_builder.add_node("publishing_agent", publishing_agent)
 _multi_agent_builder.add_node("refinement_agent", refinement_agent)
+_multi_agent_builder.add_node("clarification_agent", clarification_agent)
 _multi_agent_builder.add_node("out_of_scope_agent", out_of_scope_agent)
 _multi_agent_builder.add_node("validate_plan", validate_plan_node)
 _multi_agent_builder.set_entry_point("intent_interpreter")
@@ -989,9 +1068,10 @@ _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
     "quality_agent":"quality_agent",
     "publishing_agent":"publishing_agent",
     "refinement_agent":"refinement_agent",
+    "clarification_agent":"clarification_agent",
     "out_of_scope_agent":"out_of_scope_agent",
 })
-for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "refinement_agent", "out_of_scope_agent"):
+for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "refinement_agent", "clarification_agent", "out_of_scope_agent"):
     _multi_agent_builder.add_edge(_agent_node, "validate_plan")
 _multi_agent_builder.add_edge("validate_plan", END)
 MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
@@ -1116,7 +1196,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         if not content:
             return JSONResponse({"error":"当前没有可推送的上一条回答"}, status_code=422)
         result = {"tool":"feishu_publish_preview","content":content,"configured":bool(result.get("configured")),"requires_confirmation":True}
-    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
+    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "clarification", "out_of_scope"}:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
     calendar_context = current_calendar_context()
@@ -1125,9 +1205,9 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         "style": presentation.get("presentation_style"),
         "audience": presentation.get("presentation_audience"),
     }
-    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。用户表达要求为 {json.dumps(presentation_requirement, ensure_ascii=False)}，只影响组织和措辞，不得改变事实或数字。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。answer_refinement：只调整 refinement_source 的结构和措辞，必须保留全部数字、ERP、问题类型和省区，不得新增、删除、交换或重新计算事实。out_of_scope：简洁说明助手只处理CRM拜访质量分析、规则、文件检查、结果改写和发布。"
+    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。用户表达要求为 {json.dumps(presentation_requirement, ensure_ascii=False)}，只影响组织和措辞，不得改变事实或数字。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。answer_refinement：只调整 refinement_source 的结构和措辞，必须保留全部数字、ERP、问题类型和省区，不得新增、删除、交换或重新计算事实。clarification：只说明当前会话缺少可引用的上一轮结果，请用户先提出具体分析问题，不得猜测。out_of_scope：简洁说明助手只处理CRM拜访质量分析、规则、文件检查、结果改写和发布。"
     refinement_source = answer_refinement_source(state.get("history", []), payload.question) if tool_name == "answer_refinement" else ""
-    recent_context = [] if tool_name in {"answer_refinement", "out_of_scope"} else state.get("history", [])[-3:]
+    recent_context = [] if tool_name in {"answer_refinement", "clarification", "out_of_scope"} else state.get("history", [])[-3:]
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":recent_context}
     if refinement_source:
         material["refinement_source"] = refinement_source
