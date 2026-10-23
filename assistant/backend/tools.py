@@ -140,6 +140,13 @@ def validate_tool_result_against_plan(tool: str, plan: dict[str, Any], result: d
     if tool == "spreadsheet_query":
         if not isinstance(result, dict) or not isinstance(result.get("rows"), list):
             errors.append("表格查询结果缺少 rows")
+        facets = result.get("facets") if isinstance(result, dict) else None
+        if not isinstance(facets, dict):
+            errors.append("表格查询结果缺少 facets")
+        else:
+            for key in ("issue_types", "stations", "station_province_counts"):
+                if not isinstance(facets.get(key), list):
+                    errors.append(f"表格查询多维结果缺少: {key}")
         scope = result.get("scope") if isinstance(result, dict) else None
         if not isinstance(scope, dict):
             errors.append("表格查询结果缺少 scope")

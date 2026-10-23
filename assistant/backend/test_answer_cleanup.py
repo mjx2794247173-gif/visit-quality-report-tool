@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from assistant.backend.main import clean_generated_answer, current_calendar_context, general_chat_history
+from assistant.backend.main import clean_generated_answer, current_calendar_context, deterministic_spreadsheet_answer, general_chat_history, spreadsheet_answer_grounding_errors
 
 
 def test_removes_unsolicited_trailing_explanation() -> None:
@@ -51,3 +51,47 @@ def test_general_chat_history_excludes_business_answers() -> None:
     assert general_chat_history(history) == [
         {"question": "你是谁？", "answer": "我是拜访质量分析助手。"}
     ]
+
+
+def _spreadsheet_result() -> dict:
+    return {
+        "filtered_rows": 12,
+        "total_rows": 20,
+        "rows": [{"label": "录入不规范", "value": 4}],
+        "facets": {
+            "issue_types": [{
+                "label": "录入不规范",
+                "value": 4,
+                "dominant_province": "江苏省区",
+                "dominant_province_value": 3,
+                "province_ranking": [
+                    {"province": "江苏省区", "value": 3},
+                    {"province": "湖北省区", "value": 1},
+                ],
+            }],
+            "stations": [{"label": "demo001", "value": 2, "province": "江苏省区"}],
+            "station_province_counts": [{"province": "江苏省区", "value": 1}],
+        },
+    }
+
+
+def test_spreadsheet_grounding_rejects_unreturned_number() -> None:
+    errors = spreadsheet_answer_grounding_errors("录入不规范共有54条。", _spreadsheet_result())
+
+    assert errors == ["数字 54 没有当前工具结果依据"]
+
+
+def test_spreadsheet_grounding_rejects_wrong_concentration_province() -> None:
+    errors = spreadsheet_answer_grounding_errors("录入不规范4条，集中在湖北省区。", _spreadsheet_result())
+
+    assert "录入不规范 的集中省区应为 江苏省区，不是 湖北省区" in errors
+
+
+def test_deterministic_report_uses_only_verified_facets() -> None:
+    answer = deterministic_spreadsheet_answer("生成完整报告", {}, _spreadsheet_result())
+
+    assert "12 条" in answer
+    assert "录入不规范 4 条" in answer
+    assert "江苏省区（3 条）" in answer
+    assert "demo001 2 条" in answer
+    assert "54" not in answer

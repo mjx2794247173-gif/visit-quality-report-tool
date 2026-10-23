@@ -14,10 +14,20 @@ CONTEXT = {
 
 def test_validate_tool_result_against_plan_rejects_tampered_scope():
     plan = {"filters": {"province": "广东省区"}, "group_by": "station_erp", "metric": "visit_count", "order": "desc", "limit": 5}
-    result = {"tool": "spreadsheet_query", "scope": {**plan, "limit": 10}, "rows": []}
+    result = {"tool": "spreadsheet_query", "scope": {**plan, "limit": 10}, "rows": [], "facets": {"issue_types": [], "stations": [], "station_province_counts": []}}
     validation = validate_tool_result_against_plan("spreadsheet_query", plan, result)
     assert validation["valid"] is False
     assert "limit" in validation["errors"][0]
+
+
+def test_validate_tool_result_requires_multidimensional_facets():
+    plan = {"filters": {}, "group_by": "issue_type", "metric": "visit_count", "order": "desc", "limit": 10}
+    result = {"tool": "spreadsheet_query", "scope": plan, "rows": []}
+
+    validation = validate_tool_result_against_plan("spreadsheet_query", plan, result)
+
+    assert validation["valid"] is False
+    assert "表格查询结果缺少 facets" in validation["errors"]
 
 def test_ranking_uses_visit_counts():
     result = problem_type_ranking(CONTEXT)
