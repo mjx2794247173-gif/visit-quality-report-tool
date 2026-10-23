@@ -12,7 +12,7 @@
 → FastAPI 校验工具结果
 → DeepSeek 基于已验证结果生成回答
 → 独立验收回答完整性，必要时最多修复一次
-→ 用户确认后通过已选通知渠道发送（飞书或京ME）
+→ 用户确认后通过飞书发送
 ```
 
 当前有四个专业 Agent：
@@ -38,7 +38,6 @@
 - 阻塞型知识检索与 SQLite 读写通过线程卸载，避免卡住 FastAPI 事件循环。
 - 每次规划和回答使用 Trace ID 关联，审计日志只记录白名单元数据，不保存问题原文和 CRM 行级数据。
 - 使用飞书官方 OpenAPI MCP 将已校验回答推送到固定群聊；只开放消息发送工具，并要求用户二次确认。
-- 新增京ME适配器：公开仓库保留 `o2 launch jdme` 调用逻辑、Mock 和 dry-run；真实认证只从本机 o2 配置或环境变量读取。
 - 建立 8 条脱敏自然语言黄金评测集，分别统计 Agent 路由、工具选择、查询参数、整体通过率、请求失败率和平均耗时。
 
 ### 知识资料充分性审查
@@ -73,30 +72,6 @@ Knowledge Agent 检索后不会立即回答。系统先把用户问题和检索�
 
 后端固定使用官方 `@larksuiteoapi/lark-mcp`，且只启用 `im.v1.message.create`。浏览器不能修改目标群，模型也不能直接触发发送；真实凭证和群 ID 不得提交到 GitHub。
 
-### 可选：接入真实京ME
-
-京ME属于京东内部系统，公开版本不包含内部接口、凭证、机器人 ID、群 ID、ERP 或内部文档。查找工具和查看说明：
-
-```powershell
-o2 search jdme
-o2 info jdme
-o2 skill jdme
-o2 install jdme
-```
-
-在本机或京东内部环境完成认证后，设置：
-
-```env
-NOTIFICATION_PROVIDER=jingme
-JINGME_ENABLED=true
-JINGME_GROUP_ID=
-JINGME_DEFAULT_ROBOT_ID=
-```
-
-`jdme` 的认证由 o2 管理；认证材料不要写入仓库。当前公开适配器调用文字发送命令 `o2 launch jdme -- message.send-text`，目标可以是后端配置的群或用户 ERP。发送内容由 Python 已校验的结构化 Excel 统计结果生成，模型不能自行计算数字。用户必须在预览后明确确认；未确认不会调用发送接口。
-
-没有认证时，服务会明确返回“京ME未配置完成”，不会伪造发送成功。没有权限时可设置 `NOTIFICATION_PROVIDER=jingme-mock` 做本地演示；`dry_run=true` 只让 jdme 返回预览，不产生真实消息。飞书仍是默认的公开可运行通知渠道，原有飞书 MCP 接入保持不变。
-
 面试演示可直接上传 `sample_data/crm_visit_quality_demo.csv`（脱敏虚构数据），然后连续提问：
 
 1. 哪些站长问题最多？
@@ -123,8 +98,6 @@ py -3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 8787
 - `POST /api/chat/stream`：SSE 流式问答
 - `GET /api/feishu/status`：检查飞书 MCP 配置，不返回凭证或群 ID
 - `POST /api/feishu/send`：确认后把一条已生成回答推送到固定飞书目标
-- `GET /api/jingme/status`：检查本机 o2、开关和认证是否就绪，不返回密钥或目标值
-- `POST /api/jingme/send`：确认后发送结构化分析通报到 ERP 或群；支持 `dry_run`
 
 数据分析链路约束：模型不得自行计算关键统计数字；工具执行只使用浏览器传入的聚合上下文，不接受模型提供的原始数据或任意代码。
 
