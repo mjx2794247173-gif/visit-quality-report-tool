@@ -386,10 +386,23 @@ def spreadsheet_answer_grounding_errors(answer: str, result: dict[str, Any]) -> 
         expected = str(item.get("dominant_province") or "")
         if not label or label not in answer:
             continue
+        expected_value = int(item.get("value", 0))
+        value_match = re.search(rf"{re.escape(label)}[^\d]{{0,16}}(\d+)\s*(?:条|次)", answer)
+        if value_match and int(value_match.group(1)) != expected_value:
+            errors.append(f"{label} 的数量应为 {expected_value}，不是 {value_match.group(1)}")
         sentence = next((part for part in re.split(r"[。；\n]", answer) if label in part), "")
         match = re.search(r"(?:集中在|主要(?:出现|分布)在)([^，、；。\s]+)", sentence)
         if match and expected and match.group(1) != expected:
             errors.append(f"{label} 的集中省区应为 {expected}，不是 {match.group(1)}")
+    stations = ((result.get("facets") or {}).get("stations") or [])
+    for item in stations:
+        label = str(item.get("label") or "")
+        if not label or label not in answer:
+            continue
+        expected_value = int(item.get("value", 0))
+        value_match = re.search(rf"{re.escape(label)}[^\d]{{0,16}}(\d+)\s*(?:条|次)", answer)
+        if value_match and int(value_match.group(1)) != expected_value:
+            errors.append(f"站长 {label} 的数量应为 {expected_value}，不是 {value_match.group(1)}")
     return list(dict.fromkeys(errors))
 
 
