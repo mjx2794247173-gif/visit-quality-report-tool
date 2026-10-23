@@ -163,7 +163,7 @@
       {keys:['crm','筛选','导出'],text:'建议在 CRM 的“拜访数据”中按需要的日期、省区和拜访方式筛选，并导出包含拜访编码、客户、站长 ERP、省区、实际拜访时间、实际拜访方式、质检问题类型的 Excel。',source:'依据：CRM 导出字段说明'}
     ];
     function ask(q) { if(!q.trim())return; messages.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(q)}</div>`); const dynamic=answerFromData(q); const hit=staticAnswers.find(a=>a.keys.some(k=>q.toLowerCase().includes(k.toLowerCase()))); const result=dynamic||hit||{text:app.report?'我已经读入文件，但还没匹配到这个问题。你可以问：哪些站长连续多天出现问题、哪类问题最多、谁涉及多类问题、哪些客户被重复拜访？':'请先上传 CRM Excel，再问具体的站长、问题类型或客户。',source:''}; app.lastAnswer=result.text; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">${esc(result.text)}</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); messages.lastElementChild.scrollIntoView({behavior:'smooth',block:'nearest'}); }
-    const API_BASE = window.QUALITY_ASSISTANT_API || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8787' : 'https://visit-quality-report-tool.onrender.com');
+    const API_BASE = window.QUALITY_ASSISTANT_API || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? location.origin : 'https://visit-quality-report-tool.onrender.com');
     function erpTokens(question='') { return (question.match(/[A-Za-z][A-Za-z0-9_.-]{2,}/g)||[]).map(x=>x.trim().toLowerCase()); }
     function buildErpLookup(question='') {
       if (!app.report) return [];
