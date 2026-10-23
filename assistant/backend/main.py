@@ -101,11 +101,31 @@ class JingMeSendRequest(BaseModel):
     session_id: str = Field(default="browser-session", max_length=100)
 
 
-class AgentDecision(BaseModel):
-    """Validated output contract for the LangGraph supervisor."""
-
+class IntentFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "general_agent"]
+    province: str | None = None
+    date_expression: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    station_erp: str | None = None
+    issue_type: str | None = None
+
+
+class IntentInterpretation(BaseModel):
+    """General semantic layer shared by every specialist Agent."""
+    model_config = ConfigDict(extra="forbid")
+    domain: Literal["data", "knowledge", "quality", "publishing", "refinement", "out_of_scope"]
+    operation: Literal["query", "compare", "summarize", "explain", "check", "publish", "refine", "clarify"]
+    filters: IntentFilters = Field(default_factory=IntentFilters)
+    groupings: list[Literal["station_erp", "issue_type", "province", "date", "customer"]] = Field(default_factory=list, max_length=5)
+    metric: Literal["visit_count", "distinct_visit_count", "distinct_issue_type_count", "distinct_date_count", "distinct_customer_count"] | None = None
+    order: Literal["desc", "asc"] | None = None
+    limit: int | None = Field(default=None, ge=1, le=50)
+    presentation_style: str | None = Field(default=None, max_length=100)
+    presentation_audience: str | None = Field(default=None, max_length=100)
+    uses_previous_query: bool = False
+    uses_previous_answer: bool = False
+    missing_information: list[str] = Field(default_factory=list, max_length=5)
 
 
 class SpreadsheetFilters(BaseModel):
@@ -159,7 +179,7 @@ class WorkflowBinding(BaseModel):
     workflow_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     signature: str = Field(pattern=r"^[a-f0-9]{64}$")
     question: str = Field(min_length=1, max_length=2000)
-    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"]
+    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"]
     plan: dict[str, Any]
     file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
@@ -183,7 +203,7 @@ class WorkingMemory(BaseModel):
     """Sanitized rolling query state; never contains CRM rows or answer text."""
 
     model_config = ConfigDict(extra="forbid")
-    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"] | None = None
+    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"] | None = None
     filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
     group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"] | None = None
     metric: Literal["visit_count", "distinct_visit_count", "distinct_issue_type_count", "distinct_date_count", "distinct_customer_count"] | None = None
@@ -440,18 +460,20 @@ DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","
 
 FEISHU_PREVIEW_TOOL = {"type":"function","function":{"name":"feishu_publish_preview","description":"为最近一次回答生成飞书发布预览。用户明确说发送、推送、发到飞书时使用；此工具只准备内容，页面仍需用户确认。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-GENERAL_CHAT_TOOL = {"type":"function","function":{"name":"general_chat","description":"回答与CRM拜访分析无关的普通自然语言问题，例如日期星期、常识、寒暄和简单说明；不得读取或推断Excel数据。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
+INTENT_INTERPRETATION_TOOL = {"type":"function","function":{"name":"submit_intent","description":"把用户自然语言完整解释为可校验的业务意图，不回答问题、不计算数据。","parameters":{"type":"object","properties":{"domain":{"type":"string","enum":["data","knowledge","quality","publishing","refinement","out_of_scope"]},"operation":{"type":"string","enum":["query","compare","summarize","explain","check","publish","refine","clarify"]},"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"date_expression":{"type":["string","null"]},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"groupings":{"type":"array","items":{"type":"string","enum":["station_erp","issue_type","province","date","customer"]},"maxItems":5},"metric":{"type":["string","null"],"enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count",None]},"order":{"type":["string","null"],"enum":["desc","asc",None]},"limit":{"type":["integer","null"],"minimum":1,"maximum":50},"presentation_style":{"type":["string","null"]},"presentation_audience":{"type":["string","null"]},"uses_previous_query":{"type":"boolean"},"uses_previous_answer":{"type":"boolean"},"missing_information":{"type":"array","items":{"type":"string"},"maxItems":5}},"required":["domain","operation","filters","groupings","metric","order","limit","presentation_style","presentation_audience","uses_previous_query","uses_previous_answer","missing_information"],"additionalProperties":False}}}
 
-PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL, GENERAL_CHAT_TOOL]
+ANSWER_REFINEMENT_TOOL = {"type":"function","function":{"name":"answer_refinement","description":"只改写上一条已校验答案，不重新计算数据。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-DELEGATE_AGENT_TOOL = {"type":"function","function":{"name":"delegate_to_agent","description":"根据用户意图把任务委派给一个专业 Agent。","parameters":{"type":"object","properties":{"agent":{"type":"string","enum":["data_agent","knowledge_agent","quality_agent","publishing_agent","general_agent"]}},"required":["agent"],"additionalProperties":False}}}
+OUT_OF_SCOPE_TOOL = {"type":"function","function":{"name":"out_of_scope","description":"请求与拜访质量分析、规则、文件检查、发布或上一条回答改写无关。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
+PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL, ANSWER_REFINEMENT_TOOL, OUT_OF_SCOPE_TOOL]
 
 class MultiAgentState(TypedDict, total=False):
     question: str
     schema_context: dict[str, Any]
     recent: list[dict[str, Any]]
     working_memory: dict[str, Any]
+    intent: dict[str, Any]
     agent: str
     tool: str
     plan: dict[str, Any]
@@ -579,7 +601,7 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
             order=query_plan.order,
             limit=query_plan.limit,
         )
-    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
+    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
         memory.last_tool = tool
     return memory.model_dump(exclude_none=True)
 
@@ -620,20 +642,6 @@ def current_calendar_context(now: datetime | None = None) -> dict[str, str]:
         "current_week_monday": week_start.isoformat(),
         "current_week_sunday": week_end.isoformat(),
     }
-
-
-def general_chat_history(history: list[dict[str, Any]], limit: int = 3) -> list[dict[str, str]]:
-    """Keep only prior general-chat turns; business answers are not general facts."""
-    turns: list[dict[str, str]] = []
-    for item in history:
-        result = item.get("result") if isinstance(item.get("result"), dict) else {}
-        if result.get("tool") != "general_chat":
-            continue
-        question = str(item.get("question") or "").strip()
-        answer = str(item.get("answer") or "").strip()
-        if question and answer:
-            turns.append({"question": question[:500], "answer": answer[:1000]})
-    return turns[-limit:]
 
 
 def is_answer_refinement_request(question: str) -> bool:
@@ -781,23 +789,36 @@ async def clear_pending_workflow_async(session_id: str) -> None:
     await asyncio.to_thread(clear_pending_workflow, session_id)
 
 
-async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
+async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
     messages = [
-        {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent；与CRM拜访业务无关的普通常识、日期星期、寒暄和简单自然语言问题交给 general_agent。不得因为当前会话上传了Excel就把普通问题强行路由到 data_agent。必须调用 delegate_to_agent。"},
-        {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
+        {"role":"system","content":"你是拜访质量助手的通用语义解释器，不回答问题、不计算数字。理解用户完整意图、上下文引用、筛选条件、分组、指标、排序、Top N和表达要求，调用 submit_intent。CRM数据查询为data；规则字段口径为knowledge；文件完整性为quality；发送发布为publishing；明确要求改写上一条答案为refinement；完全无关才为out_of_scope。常识用于理解业务表达，例如本周、领导汇报、换成浙江，不应因此判为out_of_scope。不得把虚假/违规自动映射成具体问题类型。"},
+        {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
-    _, arguments = await _function_call(messages, [DELEGATE_AGENT_TOOL])
+    _, arguments = await _function_call(messages, [INTENT_INTERPRETATION_TOOL])
     try:
-        decision = AgentDecision.model_validate(arguments)
+        intent = IntentInterpretation.model_validate(arguments)
     except Exception as exc:
-        raise RuntimeError("Supervisor 返回了无效的 Agent 决策，请重试") from exc
-    return {**state, "agent": decision.agent}
+        raise RuntimeError("通用语义解释器返回了无效意图，请重试") from exc
+    return {**state, "intent": intent.model_dump()}
+
+
+async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
+    intent = IntentInterpretation.model_validate(state.get("intent") or {})
+    if intent.domain == "refinement" and not answer_refinement_source(state.get("recent", []), state["question"]):
+        intent.missing_information = ["当前会话没有可改写的上一条答案"]
+    return {**state, "intent": intent.model_dump()}
+
+
+async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
+    domain = IntentInterpretation.model_validate(state["intent"]).domain
+    mapping = {"data":"data_agent", "knowledge":"knowledge_agent", "quality":"quality_agent", "publishing":"publishing_agent", "refinement":"refinement_agent", "out_of_scope":"out_of_scope_agent"}
+    return {**state, "agent": mapping[domain]}
 
 
 def _agent_messages(state: MultiAgentState, instruction: str) -> list[dict[str, Any]]:
     return [
         {"role":"system","content":SYSTEM + instruction},
-        {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
+        {"role":"user","content":f"结构化意图：{json.dumps(state.get('intent', {}),ensure_ascii=False)}\n滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
 
 def normalize_spreadsheet_limit(question: str, limit: int) -> int:
@@ -851,6 +872,39 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
     return normalized
 
 
+def merge_validated_intent_into_spreadsheet_plan(
+    question: str,
+    schema_context: dict[str, Any],
+    intent_payload: dict[str, Any],
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge interpreter output without allowing model-invented data filters."""
+    intent = IntentInterpretation.model_validate(intent_payload)
+    merged = SpreadsheetPlan.model_validate(plan).model_dump()
+    filters = merged["filters"]
+    interpreted = intent.filters.model_dump()
+    province = interpreted.get("province") or filters.get("province")
+    issue_type = interpreted.get("issue_type") or filters.get("issue_type")
+    station_erp = interpreted.get("station_erp") or filters.get("station_erp")
+    filters["province"] = normalize_province_filter(question, province, schema_context)
+    filters["issue_type"] = normalize_issue_type(question, issue_type)
+    filters["station_erp"] = station_erp if station_erp and station_erp in question else filters.get("station_erp")
+    for key in ("date_from", "date_to"):
+        if interpreted.get(key):
+            filters[key] = interpreted[key]
+    merged["filters"] = normalize_relative_date_filters(question, filters)
+    if intent.groupings:
+        merged["group_by"] = intent.groupings[0]
+    if intent.metric:
+        merged["metric"] = intent.metric
+    if intent.order:
+        merged["order"] = intent.order
+    if intent.limit:
+        merged["limit"] = intent.limit
+    merged["limit"] = normalize_spreadsheet_limit(question, merged["limit"])
+    return SpreadsheetPlan.model_validate(merged).model_dump()
+
+
 async def data_agent(state: MultiAgentState) -> MultiAgentState:
     instruction = "你是数据分析 Agent，只能调用 spreadsheet_query。识别省区、日期、ERP、问题类型、分组、指标、排序和 Top N。不得把‘虚假’或‘违规’擅自映射成某个具体问题类型；泛指虚假次数时 issue_type=null。"
     tool, raw_plan = await _function_call(_agent_messages(state, instruction), [SPREADSHEET_QUERY_TOOL])
@@ -858,13 +912,9 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
         query_plan = SpreadsheetPlan.model_validate(raw_plan)
     except Exception as exc:
         raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试") from exc
-    plan = query_plan.model_dump()
-    plan["limit"] = normalize_spreadsheet_limit(state["question"], plan["limit"])
-    filters = plan["filters"]
-    filters["province"] = normalize_province_filter(state["question"], filters["province"], state.get("schema_context", {}))
-    filters["issue_type"] = normalize_issue_type(state["question"], filters["issue_type"])
-    filters = normalize_relative_date_filters(state["question"], filters)
-    plan["filters"] = filters
+    plan = merge_validated_intent_into_spreadsheet_plan(
+        state["question"], state.get("schema_context", {}), state["intent"], query_plan.model_dump()
+    )
     return {**state, "tool": tool, "plan": plan}
 
 
@@ -895,9 +945,12 @@ async def publishing_agent(state: MultiAgentState) -> MultiAgentState:
     return {**state, "tool": tool, "plan": plan}
 
 
-async def general_agent(state: MultiAgentState) -> MultiAgentState:
-    """Select a no-data answer path for ordinary non-business questions."""
-    return {**state, "tool": "general_chat", "plan": {}}
+async def refinement_agent(state: MultiAgentState) -> MultiAgentState:
+    return {**state, "tool": "answer_refinement", "plan": {}}
+
+
+async def out_of_scope_agent(state: MultiAgentState) -> MultiAgentState:
+    return {**state, "tool": "out_of_scope", "plan": {}}
 
 
 def _next_agent(state: MultiAgentState) -> str:
@@ -907,7 +960,7 @@ async def validate_plan_node(state: MultiAgentState) -> MultiAgentState:
     """Explicit graph boundary for validating the selected tool and plan."""
     tool = state.get("tool")
     plan = state.get("plan")
-    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
+    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
         raise RuntimeError("Agent 选择了不受支持的工具")
     if not isinstance(plan, dict):
         raise RuntimeError("Agent 返回了无效的查询计划")
@@ -928,22 +981,28 @@ def plan_signature(session_id: str, workflow_id: str, question: str, tool: str, 
 
 
 _multi_agent_builder = StateGraph(MultiAgentState)
+_multi_agent_builder.add_node("intent_interpreter", intent_interpreter)
+_multi_agent_builder.add_node("validate_intent", validate_intent_node)
 _multi_agent_builder.add_node("supervisor_agent", supervisor_agent)
 _multi_agent_builder.add_node("data_agent", data_agent)
 _multi_agent_builder.add_node("knowledge_agent", knowledge_agent)
 _multi_agent_builder.add_node("quality_agent", quality_agent)
 _multi_agent_builder.add_node("publishing_agent", publishing_agent)
-_multi_agent_builder.add_node("general_agent", general_agent)
+_multi_agent_builder.add_node("refinement_agent", refinement_agent)
+_multi_agent_builder.add_node("out_of_scope_agent", out_of_scope_agent)
 _multi_agent_builder.add_node("validate_plan", validate_plan_node)
-_multi_agent_builder.set_entry_point("supervisor_agent")
+_multi_agent_builder.set_entry_point("intent_interpreter")
+_multi_agent_builder.add_edge("intent_interpreter", "validate_intent")
+_multi_agent_builder.add_edge("validate_intent", "supervisor_agent")
 _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
     "data_agent":"data_agent",
     "knowledge_agent":"knowledge_agent",
     "quality_agent":"quality_agent",
     "publishing_agent":"publishing_agent",
-    "general_agent":"general_agent",
+    "refinement_agent":"refinement_agent",
+    "out_of_scope_agent":"out_of_scope_agent",
 })
-for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "general_agent"):
+for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "refinement_agent", "out_of_scope_agent"):
     _multi_agent_builder.add_edge(_agent_node, "validate_plan")
 _multi_agent_builder.add_edge("validate_plan", END)
 MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
@@ -965,7 +1024,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
     refinement_source = answer_refinement_source(state.get("history", []), payload.question)
     cached_plan = _plan_cache.get(cache_key)
     if refinement_source:
-        graph_result = {"agent":"general_agent", "tool":"general_chat", "plan":{}}
+        graph_result = {"agent":"refinement_agent", "tool":"answer_refinement", "plan":{}, "intent":{"domain":"refinement","operation":"refine"}}
     elif cached_plan and time.monotonic() - cached_plan[0] <= PLAN_CACHE_TTL_SECONDS:
         graph_result = dict(cached_plan[1])
     else:
@@ -981,6 +1040,7 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
             _plan_cache.popitem(last=False)
     workflow_id = uuid.uuid4().hex
     plan = graph_result.get("plan", {})
+    state["current_intent"] = graph_result.get("intent", {})
     signature = plan_signature(payload.session_id, workflow_id, payload.question, graph_result["tool"], plan, payload.file_fingerprint)
     state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool=graph_result["tool"], plan=plan, signature=signature, file_fingerprint=payload.file_fingerprint).model_dump()
     if PERSIST_SESSION_STATE:
@@ -1067,22 +1127,24 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         if not content:
             return JSONResponse({"error":"当前没有可推送的上一条回答"}, status_code=422)
         result = {"tool":"feishu_publish_preview","content":content,"configured":bool(result.get("configured")),"requires_confirmation":True}
-    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
+    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "answer_refinement", "out_of_scope"}:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
     calendar_context = current_calendar_context()
-    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径；但如果材料含 refinement_source，说明用户明确要求改写上一条已校验回答，只能调整结构和措辞，必须保留全部数字、ERP、问题类型和省区，不得新增、删除、交换或重新计算事实。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
-    refinement_source = answer_refinement_source(state.get("history", []), payload.question) if tool_name == "general_chat" else ""
-    recent_context = general_chat_history(state.get("history", [])) if tool_name == "general_chat" and not refinement_source else (state.get("history", [])[-3:] if tool_name != "general_chat" else [])
+    presentation = state.get("current_intent", {})
+    presentation_requirement = {
+        "style": presentation.get("presentation_style"),
+        "audience": presentation.get("presentation_audience"),
+    }
+    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。用户表达要求为 {json.dumps(presentation_requirement, ensure_ascii=False)}，只影响组织和措辞，不得改变事实或数字。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。answer_refinement：只调整 refinement_source 的结构和措辞，必须保留全部数字、ERP、问题类型和省区，不得新增、删除、交换或重新计算事实。out_of_scope：简洁说明助手只处理CRM拜访质量分析、规则、文件检查、结果改写和发布。"
+    refinement_source = answer_refinement_source(state.get("history", []), payload.question) if tool_name == "answer_refinement" else ""
+    recent_context = [] if tool_name in {"answer_refinement", "out_of_scope"} else state.get("history", [])[-3:]
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":recent_context}
-    if tool_name == "general_chat":
-        material["calendar_context"] = calendar_context
-        if refinement_source:
-            material["refinement_source"] = refinement_source
+    if refinement_source:
+        material["refinement_source"] = refinement_source
     try:
         async with httpx.AsyncClient(timeout=45) as client:
-            thinking_mode = {"type": "enabled"} if tool_name == "general_chat" else {"type": "disabled"}
-            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":thinking_mode,"stream":False,"max_tokens":1400 if tool_name == "general_chat" else 1000})
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
     except httpx.HTTPError:
         logger.exception("answer_model_request_failed")
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"error_type":"HTTPError","elapsed_ms":round((time.perf_counter()-started)*1000)})
@@ -1115,7 +1177,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
                 answer = deterministic_spreadsheet_answer(payload.question, payload.plan, result)
                 review = {"is_complete": True, "missing_parts": "", "status": "deterministic_fallback"}
     if refinement_source and not refinement_preserves_numbers(refinement_source, answer):
-        repaired = await regenerate_answer(payload.question, payload.plan, {"tool":"general_chat","refinement_source":refinement_source}, answer, "改写遗漏、增加或改变了数字；必须逐个保留原答案中的全部数字和对应实体", answer_system)
+        repaired = await regenerate_answer(payload.question, payload.plan, {"tool":"answer_refinement","refinement_source":refinement_source}, answer, "改写遗漏、增加或改变了数字；必须逐个保留原答案中的全部数字和对应实体", answer_system)
         if repaired and refinement_preserves_numbers(refinement_source, repaired):
             answer = repaired
             review = {"is_complete": True, "missing_parts": "", "status": "refinement_repaired_once"}
