@@ -94,7 +94,7 @@ class AgentDecision(BaseModel):
     """Validated output contract for the LangGraph supervisor."""
 
     model_config = ConfigDict(extra="forbid")
-    agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent"]
+    agent: Literal["data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "general_agent"]
 
 
 class SpreadsheetFilters(BaseModel):
@@ -358,9 +358,11 @@ DATA_QUALITY_TOOL = {"type":"function","function":{"name":"data_quality_check","
 
 FEISHU_PREVIEW_TOOL = {"type":"function","function":{"name":"feishu_publish_preview","description":"为最近一次回答生成飞书发布预览。用户明确说发送、推送、发到飞书时使用；此工具只准备内容，页面仍需用户确认。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL]
+GENERAL_CHAT_TOOL = {"type":"function","function":{"name":"general_chat","description":"回答与CRM拜访分析无关的普通自然语言问题，例如日期星期、常识、寒暄和简单说明；不得读取或推断Excel数据。","parameters":{"type":"object","properties":{},"additionalProperties":False}}}
 
-DELEGATE_AGENT_TOOL = {"type":"function","function":{"name":"delegate_to_agent","description":"根据用户意图把任务委派给一个专业 Agent。","parameters":{"type":"object","properties":{"agent":{"type":"string","enum":["data_agent","knowledge_agent","quality_agent","publishing_agent"]}},"required":["agent"],"additionalProperties":False}}}
+PLANNER_TOOLS = [SPREADSHEET_QUERY_TOOL, KNOWLEDGE_TOOL, DATA_QUALITY_TOOL, FEISHU_PREVIEW_TOOL, GENERAL_CHAT_TOOL]
+
+DELEGATE_AGENT_TOOL = {"type":"function","function":{"name":"delegate_to_agent","description":"根据用户意图把任务委派给一个专业 Agent。","parameters":{"type":"object","properties":{"agent":{"type":"string","enum":["data_agent","knowledge_agent","quality_agent","publishing_agent","general_agent"]}},"required":["agent"],"additionalProperties":False}}}
 
 
 class MultiAgentState(TypedDict, total=False):
@@ -495,7 +497,7 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
             order=query_plan.order,
             limit=query_plan.limit,
         )
-    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+    elif tool in {"knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
         memory.last_tool = tool
     return memory.model_dump(exclude_none=True)
 
@@ -651,7 +653,7 @@ async def clear_pending_workflow_async(session_id: str) -> None:
 
 async def supervisor_agent(state: MultiAgentState) -> MultiAgentState:
     messages = [
-        {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent。必须调用 delegate_to_agent。"},
+        {"role":"system","content":"你是 LangGraph Supervisor Agent，只负责把任务委派给一个专业 Agent：数据统计与ERP查询交给 data_agent；规则、口径、评分和CRM导出说明交给 knowledge_agent；文件字段、空值、上传失败和可分析性检查交给 quality_agent；发送、推送或飞书发布交给 publishing_agent；与CRM拜访业务无关的普通常识、日期星期、寒暄和简单自然语言问题交给 general_agent。不得因为当前会话上传了Excel就把普通问题强行路由到 data_agent。必须调用 delegate_to_agent。"},
         {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
     _, arguments = await _function_call(messages, [DELEGATE_AGENT_TOOL])
@@ -725,6 +727,11 @@ async def publishing_agent(state: MultiAgentState) -> MultiAgentState:
     return {**state, "tool": tool, "plan": plan}
 
 
+async def general_agent(state: MultiAgentState) -> MultiAgentState:
+    """Select a no-data answer path for ordinary non-business questions."""
+    return {**state, "tool": "general_chat", "plan": {}}
+
+
 def _next_agent(state: MultiAgentState) -> str:
     return state["agent"]
 
@@ -732,7 +739,7 @@ async def validate_plan_node(state: MultiAgentState) -> MultiAgentState:
     """Explicit graph boundary for validating the selected tool and plan."""
     tool = state.get("tool")
     plan = state.get("plan")
-    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+    if tool not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
         raise RuntimeError("Agent 选择了不受支持的工具")
     if not isinstance(plan, dict):
         raise RuntimeError("Agent 返回了无效的查询计划")
@@ -758,6 +765,7 @@ _multi_agent_builder.add_node("data_agent", data_agent)
 _multi_agent_builder.add_node("knowledge_agent", knowledge_agent)
 _multi_agent_builder.add_node("quality_agent", quality_agent)
 _multi_agent_builder.add_node("publishing_agent", publishing_agent)
+_multi_agent_builder.add_node("general_agent", general_agent)
 _multi_agent_builder.add_node("validate_plan", validate_plan_node)
 _multi_agent_builder.set_entry_point("supervisor_agent")
 _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
@@ -765,8 +773,9 @@ _multi_agent_builder.add_conditional_edges("supervisor_agent", _next_agent, {
     "knowledge_agent":"knowledge_agent",
     "quality_agent":"quality_agent",
     "publishing_agent":"publishing_agent",
+    "general_agent":"general_agent",
 })
-for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent"):
+for _agent_node in ("data_agent", "knowledge_agent", "quality_agent", "publishing_agent", "general_agent"):
     _multi_agent_builder.add_edge(_agent_node, "validate_plan")
 _multi_agent_builder.add_edge("validate_plan", END)
 MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
@@ -883,10 +892,10 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         if not content:
             return JSONResponse({"error":"当前没有可推送的上一条回答"}, status_code=422)
         result = {"tool":"feishu_publish_preview","content":content,"configured":bool(result.get("configured")),"requires_confirmation":True}
-    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"}:
+    if tool_name not in {"spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"}:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
-    answer_system = SYSTEM + "根据已选择工具的结果回答。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；排名类结果应保留工具返回范围内的完整关键数据，并按领先、居中、靠后等自然层次组织成有对比的段落，但不得计算工具未提供的占比、差值或衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。"
+    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日期是 {datetime.now().astimezone().date().isoformat()}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；排名类结果应保留工具返回范围内的完整关键数据，并按领先、居中、靠后等自然层次组织成有对比的段落，但不得计算工具未提供的占比、差值或衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径；日期与星期必须按公历准确回答。"
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":state.get("history",[])[-3:]}
     try:
         async with httpx.AsyncClient(timeout=45) as client:

@@ -17,6 +17,7 @@ def test_planner_exposes_distinct_safe_capabilities():
         "knowledge_retrieval",
         "data_quality_check",
         "feishu_publish_preview",
+        "general_chat",
     }
 
 
@@ -45,11 +46,13 @@ def test_langgraph_contains_supervisor_and_specialist_agents():
         "knowledge_agent",
         "quality_agent",
         "publishing_agent",
+        "general_agent",
     } <= nodes
 
 
 def test_supervisor_decision_accepts_only_registered_agents():
     assert AgentDecision.model_validate({"agent": "data_agent"}).agent == "data_agent"
+    assert AgentDecision.model_validate({"agent": "general_agent"}).agent == "general_agent"
     with pytest.raises(ValidationError):
         AgentDecision.model_validate({"agent": "unknown_agent"})
 
