@@ -15,7 +15,7 @@ import sqlite3
 import time
 import logging
 import uuid
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -624,6 +624,27 @@ def general_chat_history(history: list[dict[str, Any]], limit: int = 3) -> list[
             turns.append({"question": question[:500], "answer": answer[:1000]})
     return turns[-limit:]
 
+
+def is_answer_refinement_request(question: str) -> bool:
+    return bool(re.search(r"上一条|刚才|改写|重写|重新整理|整理.{0,6}(?:一下|一点|清楚|条理)|有条理|简洁一点|详细一点|换种说法|润色", question))
+
+
+def answer_refinement_source(history: list[dict[str, Any]], question: str) -> str:
+    """Expose only the last validated answer for an explicit rewrite request."""
+    if not is_answer_refinement_request(question):
+        return ""
+    for item in reversed(history):
+        answer = str(item.get("answer") or "").strip()
+        if answer:
+            return answer[:12000]
+    return ""
+
+
+def refinement_preserves_numbers(source: str, answer: str) -> bool:
+    """A style-only rewrite must preserve every numeric token exactly."""
+    tokens = lambda text: Counter(re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?", text))
+    return tokens(source) == tokens(answer)
+
 def _plan_cache_key(session_id: str, question: str, schema: dict[str, Any], memory: dict[str, Any]) -> str:
     material = json.dumps({"session": session_id, "question": question, "schema": schema, "memory": memory}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -1036,11 +1057,14 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
     calendar_context = current_calendar_context()
-    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
-    recent_context = general_chat_history(state.get("history", [])) if tool_name == "general_chat" else state.get("history", [])[-3:]
+    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径；但如果材料含 refinement_source，说明用户明确要求改写上一条已校验回答，只能调整结构和措辞，必须保留全部数字、ERP、问题类型和省区，不得新增、删除、交换或重新计算事实。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
+    refinement_source = answer_refinement_source(state.get("history", []), payload.question) if tool_name == "general_chat" else ""
+    recent_context = general_chat_history(state.get("history", [])) if tool_name == "general_chat" and not refinement_source else (state.get("history", [])[-3:] if tool_name != "general_chat" else [])
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":recent_context}
     if tool_name == "general_chat":
         material["calendar_context"] = calendar_context
+        if refinement_source:
+            material["refinement_source"] = refinement_source
     try:
         async with httpx.AsyncClient(timeout=45) as client:
             thinking_mode = {"type": "enabled"} if tool_name == "general_chat" else {"type": "disabled"}
@@ -1076,6 +1100,14 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             else:
                 answer = deterministic_spreadsheet_answer(payload.question, payload.plan, result)
                 review = {"is_complete": True, "missing_parts": "", "status": "deterministic_fallback"}
+    if refinement_source and not refinement_preserves_numbers(refinement_source, answer):
+        repaired = await regenerate_answer(payload.question, payload.plan, {"tool":"general_chat","refinement_source":refinement_source}, answer, "改写遗漏、增加或改变了数字；必须逐个保留原答案中的全部数字和对应实体", answer_system)
+        if repaired and refinement_preserves_numbers(refinement_source, repaired):
+            answer = repaired
+            review = {"is_complete": True, "missing_parts": "", "status": "refinement_repaired_once"}
+        else:
+            answer = refinement_source
+            review = {"is_complete": True, "missing_parts": "", "status": "refinement_source_fallback"}
     history_result = summarize_history_result(tool_name, result)
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
