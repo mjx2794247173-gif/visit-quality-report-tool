@@ -3,6 +3,7 @@ import asyncio
 import json
 import sqlite3
 import threading
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -73,6 +74,13 @@ def test_general_chat_is_valid_across_workflow_and_memory_contracts():
     memory = WorkingMemory.model_validate({"last_tool": "general_chat"})
     assert binding.tool == "general_chat"
     assert memory.last_tool == "general_chat"
+
+
+def test_page_refresh_starts_a_new_backend_session():
+    page = (Path(__file__).resolve().parents[1] / "index.html").read_text(encoding="utf-8")
+
+    assert "let SESSION_ID=newSessionId();" in page
+    assert "localStorage.getItem('visit-quality-session-id')" not in page
 
 
 def test_spreadsheet_plan_normalizes_optional_filters():
