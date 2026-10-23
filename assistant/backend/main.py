@@ -951,8 +951,11 @@ async def plan_query(payload: PlanRequest) -> JSONResponse:
         state["history"] = await load_context_summary_async(payload.session_id)
     recent = state.get("history", [])[-4:]
     cache_key = _plan_cache_key(payload.session_id, payload.question, payload.schema_context, state.get("working_memory", {}))
+    refinement_source = answer_refinement_source(state.get("history", []), payload.question)
     cached_plan = _plan_cache.get(cache_key)
-    if cached_plan and time.monotonic() - cached_plan[0] <= PLAN_CACHE_TTL_SECONDS:
+    if refinement_source:
+        graph_result = {"agent":"general_agent", "tool":"general_chat", "plan":{}}
+    elif cached_plan and time.monotonic() - cached_plan[0] <= PLAN_CACHE_TTL_SECONDS:
         graph_result = dict(cached_plan[1])
     else:
         try:

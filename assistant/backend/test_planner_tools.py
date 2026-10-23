@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
+from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, PlanRequest, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_query, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -100,6 +100,23 @@ def test_model_cannot_invent_province_filter_from_schema():
     assert normalize_province_filter("生成本周完整报告", "江苏省区", {"default_scope": "全部省区"}) is None
     assert normalize_province_filter("查看江苏的问题", "江苏省区", {"default_scope": "全部省区"}) == "江苏省区"
     assert normalize_province_filter("生成本周报告", None, {"default_scope": "湖北省区"}) == "湖北省区"
+
+
+def test_refinement_followup_bypasses_business_replanning(monkeypatch):
+    session_id = "9" * 32
+    sessions[session_id] = {"history": [{"answer": "录入不规范54条。", "result": {"tool": "spreadsheet_query"}}]}
+    monkeypatch.setattr("assistant.backend.main.API_KEY", "configured-for-test")
+
+    response = asyncio.run(plan_query(PlanRequest(
+        session_id=session_id,
+        question="写得有条理一点",
+        schema_context={},
+    )))
+    payload = json.loads(response.body)
+
+    assert payload["agent"] == "general_agent"
+    assert payload["tool"] == "general_chat"
+    sessions.pop(session_id, None)
 
 
 def test_spreadsheet_plan_normalizes_optional_filters():
