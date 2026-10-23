@@ -485,13 +485,13 @@ class MultiAgentState(TypedDict, total=False):
 async def _function_call(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
     """Ask DeepSeek for one tool call, retrying once on a malformed envelope."""
     attempt_messages = list(messages)
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=45) as client:
                 response = await client.post(
                     "https://api.deepseek.com/chat/completions",
                     headers={"Authorization": f"Bearer {API_KEY}"},
-                    json={"model": MODEL, "messages": attempt_messages, "tools": tools, "tool_choice": "required", "thinking": {"type": "disabled"}, "stream": False, "max_tokens": 800},
+                    json={"model": MODEL, "messages": attempt_messages, "tools": tools, "tool_choice": "required", "thinking": {"type": "disabled"}, "stream": False, "max_tokens": 1200},
                 )
         except httpx.HTTPError as exc:
             raise RuntimeError("模型服务暂时不可用，请稍后重试") from exc
@@ -505,7 +505,7 @@ async def _function_call(messages: list[dict[str, Any]], tools: list[dict[str, A
                 raise TypeError("tool arguments must be an object")
             return name, arguments
         except (ValueError, TypeError, KeyError, IndexError):
-            if attempt == 0:
+            if attempt < 2:
                 attempt_messages = messages + [{"role":"user","content":"上一次没有返回合法工具调用。请严格调用且只调用一个给定工具，arguments 必须是 JSON 对象。"}]
                 continue
     raise RuntimeError("模型返回的工具调用格式异常，请重试")
