@@ -539,6 +539,20 @@ def current_calendar_context(now: datetime | None = None) -> dict[str, str]:
         "current_week_sunday": week_end.isoformat(),
     }
 
+
+def general_chat_history(history: list[dict[str, Any]], limit: int = 3) -> list[dict[str, str]]:
+    """Keep only prior general-chat turns; business answers are not general facts."""
+    turns: list[dict[str, str]] = []
+    for item in history:
+        result = item.get("result") if isinstance(item.get("result"), dict) else {}
+        if result.get("tool") != "general_chat":
+            continue
+        question = str(item.get("question") or "").strip()
+        answer = str(item.get("answer") or "").strip()
+        if question and answer:
+            turns.append({"question": question[:500], "answer": answer[:1000]})
+    return turns[-limit:]
+
 def _plan_cache_key(session_id: str, question: str, schema: dict[str, Any], memory: dict[str, Any]) -> str:
     material = json.dumps({"session": session_id, "question": question, "schema": schema, "memory": memory}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -910,13 +924,14 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     state = sessions.setdefault(payload.session_id, {"history": []})
     calendar_context = current_calendar_context()
     answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；排名类结果应保留工具返回范围内的完整关键数据，并按领先、居中、靠后等自然层次组织成有对比的段落，但不得计算工具未提供的占比、差值或衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
-    recent_context = [] if tool_name == "general_chat" else state.get("history", [])[-3:]
+    recent_context = general_chat_history(state.get("history", [])) if tool_name == "general_chat" else state.get("history", [])[-3:]
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":recent_context}
     if tool_name == "general_chat":
         material["calendar_context"] = calendar_context
     try:
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":{"type":"disabled"},"stream":False,"max_tokens":1000})
+            thinking_mode = {"type": "enabled"} if tool_name == "general_chat" else {"type": "disabled"}
+            response = await client.post("https://api.deepseek.com/chat/completions", headers={"Authorization":f"Bearer {API_KEY}"}, json={"model":MODEL,"messages":[{"role":"system","content":answer_system},{"role":"user","content":json.dumps(material,ensure_ascii=False)}],"thinking":thinking_mode,"stream":False,"max_tokens":1400 if tool_name == "general_chat" else 1000})
     except httpx.HTTPError:
         logger.exception("answer_model_request_failed")
         audit({"trace_id":trace_id,"action":"answer","ok":False,"tool":tool_name,"error_type":"HTTPError","elapsed_ms":round((time.perf_counter()-started)*1000)})
