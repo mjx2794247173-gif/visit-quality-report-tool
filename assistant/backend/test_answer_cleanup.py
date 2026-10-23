@@ -78,13 +78,34 @@ def _spreadsheet_result() -> dict:
 def test_spreadsheet_grounding_rejects_unreturned_number() -> None:
     errors = spreadsheet_answer_grounding_errors("录入不规范共有54条。", _spreadsheet_result())
 
-    assert errors == ["数字 54 没有当前工具结果依据"]
+    assert "数字 54 没有当前工具结果依据" in errors
+    assert "录入不规范 的数量应为 4，不是 54" in errors
 
 
 def test_spreadsheet_grounding_rejects_wrong_concentration_province() -> None:
     errors = spreadsheet_answer_grounding_errors("录入不规范4条，集中在湖北省区。", _spreadsheet_result())
 
     assert "录入不规范 的集中省区应为 江苏省区，不是 湖北省区" in errors
+
+
+def test_spreadsheet_grounding_rejects_number_attached_to_wrong_entity() -> None:
+    result = _spreadsheet_result()
+    result["facets"]["issue_types"].append({
+        "label": "拍照不规范", "value": 12,
+        "dominant_province": "湖北省区", "dominant_province_value": 12,
+        "province_ranking": [{"province": "湖北省区", "value": 12}],
+    })
+
+    errors = spreadsheet_answer_grounding_errors("录入不规范12条，拍照不规范4条。", result)
+
+    assert "录入不规范 的数量应为 4，不是 12" in errors
+    assert "拍照不规范 的数量应为 12，不是 4" in errors
+
+
+def test_spreadsheet_grounding_rejects_wrong_station_count() -> None:
+    errors = spreadsheet_answer_grounding_errors("demo001有4条问题。", _spreadsheet_result())
+
+    assert "站长 demo001 的数量应为 2，不是 4" in errors
 
 
 def test_deterministic_report_uses_only_verified_facets() -> None:
