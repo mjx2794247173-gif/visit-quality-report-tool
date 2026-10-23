@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from assistant.backend.main import clean_generated_answer, current_calendar_context, deterministic_spreadsheet_answer, general_chat_history, spreadsheet_answer_grounding_errors
+from assistant.backend.main import answer_refinement_source, clean_generated_answer, current_calendar_context, deterministic_spreadsheet_answer, general_chat_history, is_answer_refinement_request, refinement_preserves_numbers, spreadsheet_answer_grounding_errors
 
 
 def test_removes_unsolicited_trailing_explanation() -> None:
@@ -116,3 +116,21 @@ def test_deterministic_report_uses_only_verified_facets() -> None:
     assert "江苏省区（3 条）" in answer
     assert "demo001 2 条" in answer
     assert "54" not in answer
+
+
+def test_refinement_request_can_read_only_last_answer() -> None:
+    history = [
+        {"question": "旧问题", "answer": "旧回答1条"},
+        {"question": "报告", "answer": "录入不规范54条，广东25条。"},
+    ]
+
+    assert is_answer_refinement_request("写得有条理一点") is True
+    assert answer_refinement_source(history, "写得有条理一点") == "录入不规范54条，广东25条。"
+    assert answer_refinement_source(history, "今天星期几") == ""
+
+
+def test_refinement_must_preserve_all_numeric_tokens() -> None:
+    source = "录入不规范54条，广东25条，站长abc01有7条。"
+
+    assert refinement_preserves_numbers(source, "广东25条；录入不规范54条；站长abc01有7条。") is True
+    assert refinement_preserves_numbers(source, "广东25条；录入不规范55条；站长abc01有7条。") is False
