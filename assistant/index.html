@@ -114,9 +114,11 @@
     const status = document.querySelector('#upload-status');
     const app = { rows: [], report: null, activeProvince: '', lastAnswer: '', lastToolResult: null, feishuConfigured: false };
     const newSessionId=()=>[...crypto.getRandomValues(new Uint8Array(16))].map(byte=>byte.toString(16).padStart(2,'0')).join('');
-    let SESSION_ID=localStorage.getItem('visit-quality-session-id')||newSessionId();
-    localStorage.setItem('visit-quality-session-id',SESSION_ID);
-    const resetSessionId=()=>{SESSION_ID=newSessionId();localStorage.setItem('visit-quality-session-id',SESSION_ID);};
+    // A browser refresh is a new visible conversation, so it must also use a
+    // new backend session. Keeping this ID in localStorage made an apparently
+    // blank page silently inherit the previous conversation.
+    let SESSION_ID=newSessionId();
+    const resetSessionId=()=>{SESSION_ID=newSessionId();};
     const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
     const text = node => node ? (node.textContent || '').trim() : '';
     const col = ref => (String(ref || '').match(/[A-Z]+/) || [''])[0];
