@@ -770,6 +770,17 @@ def normalize_issue_type(question: str, issue_type: str | None) -> str | None:
     return issue_type
 
 
+def normalize_province_filter(question: str, province: str | None, schema_context: dict[str, Any]) -> str | None:
+    """Accept a province only when the user said it or selected it in the UI."""
+    default_scope = str(schema_context.get("default_scope") or "").strip()
+    if default_scope and default_scope != "全部省区":
+        return default_scope
+    if not province:
+        return None
+    aliases = {province, province.replace("省区", ""), province.replace("地区", "")}
+    return province if any(alias and alias in question for alias in aliases) else None
+
+
 def normalize_relative_date_filters(question: str, filters: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     """Resolve common relative dates deterministically instead of trusting model arithmetic."""
     normalized = dict(filters)
@@ -805,6 +816,7 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
     plan = query_plan.model_dump()
     plan["limit"] = normalize_spreadsheet_limit(state["question"], plan["limit"])
     filters = plan["filters"]
+    filters["province"] = normalize_province_filter(state["question"], filters["province"], state.get("schema_context", {}))
     filters["issue_type"] = normalize_issue_type(state["question"], filters["issue_type"])
     filters = normalize_relative_date_filters(state["question"], filters)
     plan["filters"] = filters
