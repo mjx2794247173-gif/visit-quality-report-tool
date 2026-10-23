@@ -344,6 +344,64 @@ def clean_generated_answer(answer: str) -> str:
         paragraphs.pop()
     return "\n\n".join(part.strip() for part in paragraphs if part.strip())
 
+
+def spreadsheet_answer_grounding_errors(answer: str, result: dict[str, Any]) -> list[str]:
+    """Deterministically reject count claims and concentration claims absent from this result."""
+    allowed_numbers: set[int] = set()
+
+    def collect(value: Any, key: str = "") -> None:
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                if child_key != "scope":
+                    collect(child, child_key)
+        elif isinstance(value, list):
+            allowed_numbers.add(len(value))
+            for child in value:
+                collect(child, key)
+        elif isinstance(value, int) and not isinstance(value, bool):
+            if key in {"value", "filtered_rows", "total_rows", "dominant_province_value"} or key.endswith("_count"):
+                allowed_numbers.add(value)
+
+    collect(result)
+    errors: list[str] = []
+    for raw in re.findall(r"(?<![\d.])(\d{1,9})\s*(?:条|次|位|个|类|席)", answer):
+        number = int(raw)
+        if number not in allowed_numbers:
+            errors.append(f"数字 {number} 没有当前工具结果依据")
+
+    issue_types = ((result.get("facets") or {}).get("issue_types") or [])
+    for item in issue_types:
+        label = str(item.get("label") or "")
+        expected = str(item.get("dominant_province") or "")
+        if not label or label not in answer:
+            continue
+        sentence = next((part for part in re.split(r"[。；\n]", answer) if label in part), "")
+        match = re.search(r"(?:集中在|主要(?:出现|分布)在)([^，、；。\s]+)", sentence)
+        if match and expected and match.group(1) != expected:
+            errors.append(f"{label} 的集中省区应为 {expected}，不是 {match.group(1)}")
+    return list(dict.fromkeys(errors))
+
+
+def deterministic_spreadsheet_answer(question: str, plan: dict[str, Any], result: dict[str, Any]) -> str:
+    """Safe fallback assembled only from verified browser aggregates."""
+    rows = result.get("rows") if isinstance(result.get("rows"), list) else []
+    facets = result.get("facets") if isinstance(result.get("facets"), dict) else {}
+    if re.search(r"报告|摘要|总结|汇总|完整", question):
+        issues = facets.get("issue_types") if isinstance(facets.get("issue_types"), list) else []
+        stations = facets.get("stations") if isinstance(facets.get("stations"), list) else []
+        paragraphs = [f"当前筛选范围内共 {int(result.get('filtered_rows', 0))} 条 CRM 已识别问题记录。"]
+        if issues:
+            details = [f"{item.get('label')} {int(item.get('value', 0))} 条，数量最多的省区为 {item.get('dominant_province')}（{int(item.get('dominant_province_value', 0))} 条）" for item in issues[:10]]
+            paragraphs.append("问题类型分布：" + "；".join(details) + "。")
+        if stations:
+            details = [f"{item.get('province')} {item.get('label')} {int(item.get('value', 0))} 条" for item in stations[:10]]
+            paragraphs.append("站长问题量前列：" + "；".join(details) + "。")
+        return "\n\n".join(paragraphs)
+    if not rows:
+        return "当前筛选范围内没有匹配的 CRM 已识别问题记录。"
+    details = [f"{item.get('label')}：{int(item.get('value', 0))} 条" + (f"（{item.get('province')}）" if item.get('province') else "") for item in rows]
+    return "当前筛选范围内的结果为：" + "；".join(details) + "。"
+
 KNOWLEDGE_TOOL = {"type":"function","function":{"name":"knowledge_retrieval","description":"检索评分规则、字段说明、CRM导出要求、统计口径、通报规则、FAQ和安全边界","parameters":{"type":"object","properties":{"query":{"type":"string","description":"需要检索的业务知识问题"}},"required":["query"],"additionalProperties":False}}}
 
 RETRIEVAL_ASSESSMENT_TOOL = {"type":"function","function":{"name":"submit_retrieval_assessment","description":"判断检索资料是否足以回答用户问题，不得使用模型自身知识补全。","parameters":{"type":"object","properties":{"is_sufficient":{"type":"boolean"},"missing_information":{"type":"string","description":"资料不足时说明缺少什么；资料充分时为空字符串","maxLength":500}},"required":["is_sufficient","missing_information"],"additionalProperties":False}}}
@@ -869,6 +927,10 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
     if tool_name == "spreadsheet_query" and not isinstance(result.get("rows"), list):
         return JSONResponse({"error":"表格查询结果校验失败"}, status_code=422)
     if tool_name == "spreadsheet_query":
+        facets = result.get("facets")
+        if not isinstance(facets, dict) or not isinstance(facets.get("issue_types"), list) or not isinstance(facets.get("stations"), list):
+            return JSONResponse({"error":"表格多维统计结果不完整，请刷新页面后重新查询"}, status_code=422)
+    if tool_name == "spreadsheet_query":
         try:
             SpreadsheetPlan.model_validate(payload.plan)
         except Exception:
@@ -923,7 +985,7 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
         return JSONResponse({"error":"工具结果类型不受支持"}, status_code=422)
     state = sessions.setdefault(payload.session_id, {"history": []})
     calendar_context = current_calendar_context()
-    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；排名类结果应保留工具返回范围内的完整关键数据，并按领先、居中、靠后等自然层次组织成有对比的段落，但不得计算工具未提供的占比、差值或衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
+    answer_system = SYSTEM + f"根据已选择工具的结果回答。当前日历信息为 {json.dumps(calendar_context, ensure_ascii=False)}。spreadsheet_query：当前上传文件本身就是 CRM 质检问题数据，issue_type 为空表示全部 CRM 已识别问题记录，不要要求用户再指定问题类型；rows 是主查询结果，facets 是同一筛选范围内由浏览器确定性计算的问题类型、主省区和站长切面。只能复述这些字段。dominant_province 才表示该问题类型数量最多的省区，普通 province 字段不得解释为集中省区。记录数与多标签问题次数是不同口径。不得计算工具未提供的占比、差值、合计或其他衍生数字。knowledge_retrieval：只能依据 sources 回答并简要注明资料来源。data_quality_check：先说文件是否可分析，再列缺失字段或关键空值。feishu_publish_preview：说明已准备好上一条回答，提示用户点击页面上的‘推送飞书’确认按钮，不得声称已经发送。general_chat：直接回答普通问题，不使用Excel、CRM结果或业务口径。涉及今天、本周、星期等日期问题时，必须以当前日历信息重新判断；用户问题中的日期假设可能错误，错误时应直接纠正，不能顺着错误假设回答。"
     recent_context = general_chat_history(state.get("history", [])) if tool_name == "general_chat" else state.get("history", [])[-3:]
     material = {"question":payload.question,"plan":payload.plan,"result":result,"recent":recent_context}
     if tool_name == "general_chat":
@@ -953,6 +1015,16 @@ async def answer_query(payload: AnswerRequest) -> JSONResponse:
             review = {"is_complete": True, "missing_parts": "", "status": "repaired_once"}
         else:
             review["status"] = "repair_failed"
+    if tool_name == "spreadsheet_query":
+        grounding_errors = spreadsheet_answer_grounding_errors(answer, result)
+        if grounding_errors:
+            repaired = await regenerate_answer(payload.question, payload.plan, result, answer, "；".join(grounding_errors), answer_system)
+            if repaired and not spreadsheet_answer_grounding_errors(repaired, result):
+                answer = repaired
+                review = {"is_complete": True, "missing_parts": "", "status": "grounding_repaired_once"}
+            else:
+                answer = deterministic_spreadsheet_answer(payload.question, payload.plan, result)
+                review = {"is_complete": True, "missing_parts": "", "status": "deterministic_fallback"}
     history_result = summarize_history_result(tool_name, result)
     state["history"] = (state.get("history",[]) + [{"question":payload.question,"plan":payload.plan,"result":history_result,"answer":answer}])[-6:]
     state["working_memory"] = update_working_memory(state.get("working_memory"), tool_name, payload.plan)
