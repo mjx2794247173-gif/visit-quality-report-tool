@@ -1,6 +1,6 @@
 # 项目交接说明
 
-更新日期：2026-10-19
+更新日期：2026-10-23
 
 ## 项目目标
 
@@ -12,8 +12,10 @@
 
 ```text
 用户问题
-→ LangGraph Supervisor
-→ data / knowledge / quality / publishing Agent
+→ 通用语义解释器（只理解，不回答、不计算）
+→ Pydantic 意图校验
+→ LangGraph Supervisor 确定性路由
+→ data / knowledge / quality / publishing / refinement / out_of_scope Agent
 → Function Calling 生成白名单计划
 → 浏览器执行当前 Excel 查询或后端执行知识检索
 → FastAPI 校验结果
@@ -25,8 +27,8 @@
 
 ## 已完成进展
 
-1. 四 Agent LangGraph 路由和严格 Function Calling。
-2. Pydantic 校验 Agent 决策、查询计划、知识充分性、改写与重排结果。
+1. 通用语义解释器、确定性 Supervisor、六执行分支的 LangGraph 路由和严格 Function Calling。
+2. Pydantic 校验结构化意图、查询计划、知识充分性、改写与重排结果。
 3. 混合 RAG：关键词检索、向量检索、RRF、Rerank、相关性过滤。
 4. 独立的知识资料充分性审查：审查模型只能依据检索片段输出 `is_sufficient` 和 `missing_information`；不得直接回答或使用自身知识补全。
 5. 首次资料不足时，根据缺失信息改写查询并补充检索一次；二次审查仍不足则安全拒答，并明确告诉用户缺少什么资料。
@@ -34,7 +36,7 @@
 7. 脱敏滚动记忆与 SQLite 持久化：哈希会话键、ERP 落盘前移除、7 天 TTL。
 8. 知识检索缓存：SHA256 键、10 分钟 TTL、LRU 128；不缓存 Excel 结果和回答。
 9. 阻塞检索和 SQLite 操作通过线程卸载。
-10. 8 条脱敏黄金评测案例，覆盖全部四个 Agent。
+10. 8 条脱敏黄金评测案例，覆盖业务 Agent。
 11. 分层评测：Agent、工具、参数、整体通过率、失败率和平均耗时。
 12. 飞书 MCP 状态检查、发布预览和用户二次确认。
 

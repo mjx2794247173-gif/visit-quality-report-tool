@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from assistant.backend.main import answer_refinement_source, clean_generated_answer, current_calendar_context, deterministic_spreadsheet_answer, general_chat_history, is_answer_refinement_request, refinement_preserves_numbers, spreadsheet_answer_grounding_errors
+from assistant.backend.main import answer_refinement_source, clean_generated_answer, current_calendar_context, deterministic_spreadsheet_answer, is_answer_refinement_request, refinement_preserves_numbers, spreadsheet_answer_grounding_errors
 
 
 def test_removes_unsolicited_trailing_explanation() -> None:
@@ -32,25 +32,6 @@ def test_calendar_context_calculates_current_week_deterministically() -> None:
         "current_week_monday": "2026-10-19",
         "current_week_sunday": "2026-10-25",
     }
-
-
-def test_general_chat_history_excludes_business_answers() -> None:
-    history = [
-        {
-            "question": "分析本周数据",
-            "result": {"tool": "spreadsheet_query"},
-            "answer": "本周从10月15日开始。",
-        },
-        {
-            "question": "你是谁？",
-            "result": {"tool": "general_chat"},
-            "answer": "我是拜访质量分析助手。",
-        },
-    ]
-
-    assert general_chat_history(history) == [
-        {"question": "你是谁？", "answer": "我是拜访质量分析助手。"}
-    ]
 
 
 def _spreadsheet_result() -> dict:

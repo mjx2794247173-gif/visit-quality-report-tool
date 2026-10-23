@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import json
 import sqlite3
 import threading
@@ -9,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from assistant.backend.main import AgentDecision, AnswerRequest, EmptyToolPlan, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, PlanRequest, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_query, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
+from assistant.backend.main import AnswerRequest, EmptyToolPlan, IntentInterpretation, KnowledgePlan, MULTI_AGENT_GRAPH, PLANNER_TOOLS, PlanRequest, RetrievalAssessment, RetrievalRanking, RetrievalRewrite, SpreadsheetPlan, WorkflowBinding, WorkingMemory, _retrieval_cache, answer_query, apply_source_ranking, assess_retrieval_sufficiency, audit, clear_retrieval_cache, compact_context, filter_ranked_sources, load_working_memory, merge_retrieval_sources, merge_validated_intent_into_spreadsheet_plan, normalize_issue_type, normalize_province_filter, normalize_relative_date_filters, normalize_spreadsheet_limit, plan_query, plan_signature, reciprocal_rank_fusion, retrieve, retrieve_async, save_pending_workflow, load_pending_workflow, save_working_memory, sessions, summarize_history_result, update_working_memory
 
 
 def test_planner_exposes_distinct_safe_capabilities():
@@ -19,7 +18,8 @@ def test_planner_exposes_distinct_safe_capabilities():
         "knowledge_retrieval",
         "data_quality_check",
         "feishu_publish_preview",
-        "general_chat",
+        "answer_refinement",
+        "out_of_scope",
     }
 
 
@@ -48,33 +48,53 @@ def test_langgraph_contains_supervisor_and_specialist_agents():
         "knowledge_agent",
         "quality_agent",
         "publishing_agent",
-        "general_agent",
+        "intent_interpreter",
+        "validate_intent",
+        "refinement_agent",
+        "out_of_scope_agent",
     } <= nodes
 
 
-def test_supervisor_decision_accepts_only_registered_agents():
-    assert AgentDecision.model_validate({"agent": "data_agent"}).agent == "data_agent"
-    assert AgentDecision.model_validate({"agent": "general_agent"}).agent == "general_agent"
-    with pytest.raises(ValidationError):
-        AgentDecision.model_validate({"agent": "unknown_agent"})
-
-
-def test_supervisor_decision_requires_agent_field():
-    with pytest.raises(ValidationError):
-        AgentDecision.model_validate({})
-
-
-def test_general_chat_is_valid_across_workflow_and_memory_contracts():
+def test_answer_refinement_is_valid_across_workflow_and_memory_contracts():
     binding = WorkflowBinding.model_validate({
         "workflow_id": "a" * 32,
         "signature": "b" * 64,
         "question": "2026年10月15日是星期几？",
-        "tool": "general_chat",
+        "tool": "answer_refinement",
         "plan": {},
     })
-    memory = WorkingMemory.model_validate({"last_tool": "general_chat"})
-    assert binding.tool == "general_chat"
-    assert memory.last_tool == "general_chat"
+    memory = WorkingMemory.model_validate({"last_tool": "answer_refinement"})
+    assert binding.tool == "answer_refinement"
+    assert memory.last_tool == "answer_refinement"
+
+
+def test_general_intent_contract_supports_unenumerated_presentation_requests():
+    intent = IntentInterpretation.model_validate({
+        "domain": "data", "operation": "summarize", "filters": {},
+        "groupings": ["issue_type", "station_erp"], "metric": "visit_count",
+        "order": "desc", "limit": 10, "presentation_style": "晨会口头汇报，先讲重点",
+        "presentation_audience": "营业部负责人", "uses_previous_query": False,
+        "uses_previous_answer": False, "missing_information": [],
+    })
+    assert intent.presentation_style == "晨会口头汇报，先讲重点"
+
+
+def test_validated_intent_is_merged_into_data_plan_without_inventing_filters():
+    intent = {
+        "domain": "data", "operation": "summarize",
+        "filters": {"province": "广东省区", "date_expression": "本周"},
+        "groupings": ["issue_type"], "metric": "visit_count", "order": "desc", "limit": 10,
+        "presentation_style": "晨会汇报", "presentation_audience": None,
+        "uses_previous_query": False, "uses_previous_answer": False, "missing_information": [],
+    }
+    merged = merge_validated_intent_into_spreadsheet_plan(
+        "把本周广东的问题整理成晨会汇报", {}, intent,
+        {"filters": {}, "group_by": "station_erp", "metric": "visit_count", "order": "asc", "limit": 5},
+    )
+    assert merged["filters"]["province"] == "广东省区"
+    assert merged["filters"]["date_from"] <= merged["filters"]["date_to"]
+    assert merged["group_by"] == "issue_type"
+    assert merged["order"] == "desc"
 
 
 def test_page_refresh_starts_a_new_backend_session():
@@ -114,8 +134,8 @@ def test_refinement_followup_bypasses_business_replanning(monkeypatch):
     )))
     payload = json.loads(response.body)
 
-    assert payload["agent"] == "general_agent"
-    assert payload["tool"] == "general_chat"
+    assert payload["agent"] == "refinement_agent"
+    assert payload["tool"] == "answer_refinement"
     sessions.pop(session_id, None)
 
 
@@ -472,7 +492,9 @@ def test_no_argument_tools_reject_model_invented_parameters():
 
 def test_all_agent_contracts_reject_unknown_fields():
     with pytest.raises(ValidationError):
-        AgentDecision.model_validate({"agent": "data_agent", "reason": "extra"})
+        IntentInterpretation.model_validate({
+            "domain": "data", "operation": "query", "unexpected": True,
+        })
     with pytest.raises(ValidationError):
         SpreadsheetPlan.model_validate({
             "filters": {}, "group_by": "station_erp", "metric": "visit_count",
