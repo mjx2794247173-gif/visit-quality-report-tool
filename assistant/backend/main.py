@@ -30,6 +30,7 @@ from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
+from .jingme import build_jingme_message, get_jingme_adapter, get_jingme_status
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
@@ -87,6 +88,16 @@ class AnswerRequest(BaseModel):
 class FeishuSendRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     confirmed: bool = False
+    session_id: str = Field(default="browser-session", max_length=100)
+
+
+class JingMeSendRequest(BaseModel):
+    analysis_result: dict[str, Any]
+    content: str | None = Field(default=None, min_length=1, max_length=12000)
+    confirmed: bool = False
+    dry_run: bool = False
+    erp: str | None = Field(default=None, min_length=1, max_length=100)
+    group_id: str | None = Field(default=None, min_length=1, max_length=200)
     session_id: str = Field(default="browser-session", max_length=100)
 
 
@@ -1079,7 +1090,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "blocking_io":"thread_offload", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_optional" if PERSIST_SESSION_STATE else "memory_session_local_only", "feishu": get_feishu_status()}
+    return {"ok": True, "build_version": BUILD_VERSION, "model_configured": bool(API_KEY), "knowledge_documents": len(list(KNOWLEDGE.glob("*.md"))), "langgraph": supervise("测试路由")["langgraph"], "rag_mode": os.getenv("RAG_BACKEND", "auto"), "retrieval_mode":"hybrid_rrf_model_rerank_filter", "retrieval_cache":"memory_sha256_lru_ttl", "blocking_io":"thread_offload", "audit_mode":"metadata_whitelist_trace", "memory_mode":"sqlite_optional" if PERSIST_SESSION_STATE else "memory_session_local_only", "feishu": get_feishu_status(), "jingme": get_jingme_status()}
 
 
 @app.get("/api/feishu/status")
@@ -1109,6 +1120,44 @@ async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
     elapsed = round((time.perf_counter() - started) * 1000)
     audit({"session_id": payload.session_id, "action": "feishu_publish", "ok": True, "tool": result["tool"], "elapsed_ms": elapsed})
     return JSONResponse({**result, "elapsed_ms": elapsed})
+
+
+@app.get("/api/jingme/status")
+async def jingme_status() -> dict[str, Any]:
+    """Return JingME readiness without exposing credentials or recipients."""
+    return get_jingme_status()
+
+
+@app.post("/api/jingme/send")
+async def jingme_send(payload: JingMeSendRequest) -> JSONResponse:
+    """Send a deterministic analysis summary only after explicit confirmation."""
+    if not payload.confirmed:
+        return JSONResponse({"error": "发送前必须由用户确认"}, status_code=400)
+    if bool(payload.erp) == bool(payload.group_id) and not (payload.group_id is None and os.getenv("JINGME_GROUP_ID", "").strip()):
+        return JSONResponse({"error": "京ME目标必须且只能是 ERP 或群"}, status_code=422)
+    if payload.content is not None:
+        state = sessions.get(payload.session_id) or {}
+        history = state.get("history") or []
+        latest_answer = str(history[-1].get("answer") or "").strip() if history else ""
+        if not latest_answer or payload.content.strip() != latest_answer:
+            return JSONResponse({"error": "京ME内容与当前会话最新回答不一致，请重新生成后再发送"}, status_code=409)
+    try:
+        if payload.content is None:
+            build_jingme_message(payload.analysis_result)
+        adapter = get_jingme_adapter()
+        result = await adapter.send_text(
+            analysis_result=payload.analysis_result,
+            content=payload.content,
+            erp=payload.erp,
+            group_id=payload.group_id,
+            dry_run=payload.dry_run,
+        )
+    except Exception as exc:
+        logger.exception("jingme_publish_failed")
+        audit({"session_id": payload.session_id, "action": "jingme_publish", "ok": False, "dry_run": payload.dry_run, "error_type": type(exc).__name__})
+        return JSONResponse({"error": "京ME发送失败", "detail": str(exc)}, status_code=502)
+    audit({"session_id": payload.session_id, "action": "jingme_publish", "ok": True, "dry_run": payload.dry_run, "channel": result.get("channel"), "has_packet_id": bool(result.get("packet_id"))})
+    return JSONResponse(result)
 
 
 @app.post("/api/chat")
