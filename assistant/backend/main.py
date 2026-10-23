@@ -148,7 +148,7 @@ class WorkflowBinding(BaseModel):
     workflow_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     signature: str = Field(pattern=r"^[a-f0-9]{64}$")
     question: str = Field(min_length=1, max_length=2000)
-    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"]
+    tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"]
     plan: dict[str, Any]
     file_fingerprint: str = Field(default="", pattern=r"^(|[a-f0-9]{64})$")
 
@@ -172,7 +172,7 @@ class WorkingMemory(BaseModel):
     """Sanitized rolling query state; never contains CRM rows or answer text."""
 
     model_config = ConfigDict(extra="forbid")
-    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview"] | None = None
+    last_tool: Literal["spreadsheet_query", "knowledge_retrieval", "data_quality_check", "feishu_publish_preview", "general_chat"] | None = None
     filters: SpreadsheetFilters = Field(default_factory=SpreadsheetFilters)
     group_by: Literal["station_erp", "issue_type", "province", "date", "customer", "none"] | None = None
     metric: Literal["visit_count", "distinct_visit_count", "distinct_issue_type_count", "distinct_date_count", "distinct_customer_count"] | None = None
