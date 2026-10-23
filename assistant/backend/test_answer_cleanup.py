@@ -1,4 +1,6 @@
-from assistant.backend.main import clean_generated_answer
+from datetime import datetime
+
+from assistant.backend.main import clean_generated_answer, current_calendar_context
 
 
 def test_removes_unsolicited_trailing_explanation() -> None:
@@ -20,3 +22,13 @@ def test_keeps_requested_result_paragraphs() -> None:
     answer = "广东省区共 590 条。\n\n上海区共 363 条。"
 
     assert clean_generated_answer(answer) == answer
+
+
+def test_calendar_context_calculates_current_week_deterministically() -> None:
+    context = current_calendar_context(datetime(2026, 10, 23, 12, 0))
+
+    assert context == {
+        "today": "2026-10-23",
+        "current_week_monday": "2026-10-19",
+        "current_week_sunday": "2026-10-25",
+    }
