@@ -5,7 +5,7 @@
 1. 根目录的“虚假拜访通报工具”：浏览器本地筛选 CRM 明细、计算重点案例并生成通报。
 2. [`assistant/`](assistant/) 下的“拜访质量分析智能助手”：通过 LangGraph、Function Calling 和 RAG 理解自然语言问题，调用浏览器本地 Excel 分析能力，并支持飞书发布预览。
 
-智能助手的完整架构、启动方法和测试命令见 [`assistant/README.md`](assistant/README.md)；当前开发进展和后续任务见 [`HANDOFF.md`](HANDOFF.md)。
+智能助手的完整架构、启动方法和测试命令见 [`assistant/README.md`](assistant/README.md)；历史交接记录见 [`HANDOFF.md`](HANDOFF.md)；截至 2026-10-26 的准确现状、双版本同步规则和后续需求见 [`HANDOFF_2026-10-26.md`](HANDOFF_2026-10-26.md)。
 
 ## 虚假拜访通报工具
 

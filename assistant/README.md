@@ -156,4 +156,4 @@ py -3.12 -m assistant.backend.conversation_eval
 
 公开 GitHub Pages 页面仍作为演示入口；完整 FastAPI 版本用于本地下载运行和面试演示。
 
-继续开发前请先阅读仓库根目录的 [`HANDOFF.md`](../HANDOFF.md) 和 [`AGENTS.md`](../AGENTS.md)。
+继续开发前请先阅读仓库根目录的 [`HANDOFF_2026-10-26.md`](../HANDOFF_2026-10-26.md)、历史 [`HANDOFF.md`](../HANDOFF.md) 和 [`AGENTS.md`](../AGENTS.md)。
