@@ -84,6 +84,8 @@
     .publish-answer { padding:6px 11px; color:#fff; background:var(--orange); border:0; border-radius:999px; font-size:10px; cursor:pointer; }
     .publish-answer:hover { background:var(--orange-dark); }
     .publish-answer:disabled { opacity:.55; cursor:wait; }
+    .publish-answer[data-feishu-publish] { font-size:0; }
+    .publish-answer[data-feishu-publish]:after { content:"推送"; font-size:10px; }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
     @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
     @media (max-width:980px) { .app-shell { display:block; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; transform:none; } .side { display:none; } .chat { height:760px; margin:0 10px 10px; } }
@@ -101,7 +103,7 @@
     </header>
     <section class="panel upload-panel">
       <h2>上传文件</h2>
-      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls" hidden><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">筛选</button></div></div>
+      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls" hidden><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">筛选</button></div><div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div></div>
     </section>
     <aside class="panel side">
       <h2>上传后，你可以这样问</h2>
@@ -109,7 +111,6 @@
       <div class="rule"><strong>看谁的问题最多</strong><span>例如：华东省区哪位站长拍照不规范最多？</span></div>
       <div class="rule"><strong>看问题集中在哪里</strong><span>例如：当前省区哪类问题最多？哪些站长涉及多类问题？</span></div>
       <div class="rule"><strong>看问题是否持续</strong><span>例如：哪些站长连续多天出现问题？哪些客户被重复拜访？</span></div>
-      <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
     </aside>
   </aside>
   <main>
