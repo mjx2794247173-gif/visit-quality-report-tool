@@ -32,6 +32,16 @@ class JingMeAdapter(Protocol):
     ) -> dict[str, Any]: ...
 
 
+async def list_groups() -> dict[str, Any]:
+    return await asyncio.to_thread(_run_jdme_read, "group.list", {"page": 1, "page_size": 200})
+
+
+async def list_group_members(group_id: str) -> dict[str, Any]:
+    if not str(group_id).strip():
+        raise ValueError("缺少群 ID")
+    return await asyncio.to_thread(_run_jdme_read, "group.member-list", {"group_id": str(group_id), "page": 1, "page_size": 200})
+
+
 def _setting(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
@@ -239,6 +249,22 @@ def _safe_cli_error(stdout: str | None, stderr: str | None) -> str:
             message = str(error.get("message") or "京ME业务调用失败")[:240]
             return f"{code}：{message}"
     return "请运行 jdme doctor --json 检查认证和权限"
+
+
+def _run_jdme_read(command_name: str, request: dict[str, Any]) -> dict[str, Any]:
+    direct = shutil.which("jdme.cmd" if os.name == "nt" else "jdme")
+    if not direct:
+        raise RuntimeError("未找到 jdme 命令")
+    completed = subprocess.run([direct, command_name, "--input", json.dumps(request, ensure_ascii=False), "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError(f"京ME查询失败：{_safe_cli_error(completed.stdout, completed.stderr)}")
+    try:
+        payload = json.loads(completed.stdout or "")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("京ME查询返回格式异常") from exc
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise RuntimeError("京ME查询失败")
+    return payload.get("data") if isinstance(payload.get("data"), dict) else {}
 
 
 def get_jingme_adapter() -> JingMeAdapter:

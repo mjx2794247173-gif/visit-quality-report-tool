@@ -30,7 +30,7 @@ from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
-from .jingme import build_jingme_message, get_jingme_adapter, get_jingme_status
+from .jingme import build_jingme_message, get_jingme_adapter, get_jingme_status, list_groups, list_group_members
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
@@ -1569,6 +1569,24 @@ async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
 async def jingme_status() -> dict[str, Any]:
     """Return JingME readiness without exposing credentials or recipients."""
     return get_jingme_status()
+
+
+@app.get("/api/jingme/groups")
+async def jingme_groups() -> JSONResponse:
+    try:
+        return JSONResponse(await list_groups())
+    except Exception as exc:
+        logger.exception("jingme_group_list_failed")
+        return JSONResponse({"error": "京ME群列表读取失败", "detail": str(exc)}, status_code=502)
+
+
+@app.get("/api/jingme/groups/{group_id}/members")
+async def jingme_group_members(group_id: str) -> JSONResponse:
+    try:
+        return JSONResponse(await list_group_members(group_id))
+    except Exception as exc:
+        logger.exception("jingme_member_list_failed")
+        return JSONResponse({"error": "京ME群成员读取失败", "detail": str(exc)}, status_code=502)
 
 
 @app.post("/api/jingme/send")
