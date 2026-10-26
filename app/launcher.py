@@ -8,7 +8,13 @@ import urllib.request
 import webview
 
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if getattr(sys, "frozen", False):
+    # The EXE lives in app/dist; use its real location instead of the
+    # temporary PyInstaller extraction directory so double-clicking from
+    # Desktop/Explorer can still find the repository backend.
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "..", ".."))
+else:
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 URL = "http://127.0.0.1:8788/"
 
 
