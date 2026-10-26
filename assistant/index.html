@@ -7,11 +7,11 @@
   <style>
     :root { --ink:#111; --deep:#111; --muted:#595959; --orange:#ffd02f; --orange-dark:#e65317; --orange-soft:#fff0e8; --line:#dedede; --canvas:#fff; }
     * { box-sizing:border-box; }
-    html,body { width:100%; height:100%; }
-    body { min-height:0; margin:0; overflow:hidden; color:var(--ink); background:#f7f7f7; font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
+    html,body { min-height:100%; }
+    body { margin:0; color:var(--ink); background:#f7f7f7; font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
     button,input,select { font:inherit; }
     button { -webkit-tap-highlight-color:transparent; }
-    .app-shell { width:100%; height:100vh; min-height:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:76px 390px minmax(0,1fr); column-gap:0; row-gap:16px; }
+    .app-shell { min-height:100vh; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:76px auto minmax(700px,1fr); column-gap:0; row-gap:18px; }
     .workspace-rail { display:contents; }
     .top { grid-column:1/3; grid-row:1; display:flex; align-items:center; gap:22px; padding:0 28px; background:var(--orange); border-bottom:3px solid var(--ink); position:relative; z-index:5; }
     .top:before { content:"质"; display:grid; place-items:center; width:42px; height:42px; border-radius:12px; background:#fff; color:var(--ink); font-size:20px; font-weight:700; transform:rotate(-4deg); box-shadow:4px 4px 0 var(--ink); }
@@ -41,18 +41,18 @@
     .scope-controls button { grid-column:1/-1; min-height:34px; color:#fff; background:var(--ink); border:0; border-radius:999px; cursor:pointer; font-size:10px; font-weight:700; }
     .province-filter[hidden], .scope-controls[hidden] { display:none !important; }
     .scope-controls button:hover { background:var(--orange-dark); }
-    .side { grid-column:2; grid-row:2; align-self:stretch; height:100%; min-height:0; margin:0 18px 0 9px; padding:0; display:flex; flex-direction:column; z-index:1; }
+    .side { grid-column:2; grid-row:2; align-self:start; margin:0 18px 0 9px; padding:0; z-index:1; }
     .side h2 { margin:0 0 6px; padding:0 5px; color:var(--deep); font-size:15px; }
     .side>p { margin:0 0 12px; padding:0 5px; color:var(--muted); font-size:10px; line-height:1.6; }
-    .rule { flex:1; min-height:0; margin-bottom:9px; padding:13px 15px; border:1px solid var(--ink); border-radius:15px; transition:.18s ease; box-shadow:3px 3px 0 var(--ink); }
+    .rule { min-height:0; margin-bottom:14px; padding:13px 15px; border:1px solid var(--ink); border-radius:15px; transition:.18s ease; box-shadow:3px 3px 0 var(--ink); }
     .rule:nth-of-type(1) { background:#fff; transform:rotate(1deg); }
     .rule:nth-of-type(2) { background:var(--orange-soft); transform:rotate(-1deg); }
     .rule:nth-of-type(3) { background:#fff; transform:rotate(.7deg); }
     .rule:hover { transform:translateX(4px) rotate(0); }
     .rule strong { display:block; margin-bottom:3px; color:var(--deep); font-size:11px; }
     .rule span { color:var(--muted); font-size:9px; line-height:1.55; }
-    .notice { margin-top:auto; padding:0; color:var(--muted); background:transparent; border-radius:0; font-size:9px; line-height:1.7; }
-    .chat { grid-column:1/3; grid-row:3; min-width:0; min-height:0; height:100%; margin:0 18px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:26px; background:#fff; box-shadow:0 14px 40px rgba(0,0,0,.08); animation:rise .48s ease both; }
+    .notice { margin-top:22px; padding:0; color:var(--muted); background:transparent; border-radius:0; font-size:9px; line-height:1.7; }
+    .chat { grid-column:1/3; grid-row:3; min-width:0; min-height:700px; height:760px; margin:0 18px 18px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:26px; background:#fff; box-shadow:0 14px 40px rgba(0,0,0,.08); animation:rise .48s ease both; }
     .panel-title { min-height:82px; padding:17px 25px; display:flex; align-items:center; justify-content:space-between; gap:18px; background:#fff; border-bottom:1px solid var(--line); }
     .panel-title h2 { margin:0; color:var(--deep); font-size:25px; font-weight:600; }
     .panel-title span[style] { margin-left:0!important; color:var(--muted)!important; }
@@ -98,7 +98,7 @@
     .push-actions button:last-child { color:#fff; background:var(--ink); }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
     @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
-    @media (max-width:900px) { body { overflow:auto; } .app-shell { display:block; height:auto; min-height:100vh; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; min-height:390px; } .side { display:flex; height:auto; min-height:390px; margin:16px; } .chat { height:760px; min-height:760px; margin:16px 10px 10px; } }
+    @media (max-width:900px) { .app-shell { display:block; min-height:0; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; min-height:390px; } .side { margin:16px; } .chat { height:760px; min-height:760px; margin:16px 10px 10px; } }
     @media (max-width:620px) { h1 { display:none; } .top { min-height:66px; } .top:before { width:36px; height:36px; } .eyebrow { font-size:18px; } .upload-panel { margin:10px; padding:17px; } .chat { height:calc(100vh - 258px); min-height:550px; border-radius:20px 20px 0 0; } .panel-title { min-height:72px; padding:14px 16px; } .panel-title h2 { font-size:21px; } .status { max-width:145px; white-space:normal; } .messages { padding:22px 15px; } .msg,.answer-wrap { max-width:94%; width:auto; } .quick { padding:10px 12px; } .composer { padding:11px 13px 14px; } .send { min-width:70px; } }
     @media (prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
   </style>
