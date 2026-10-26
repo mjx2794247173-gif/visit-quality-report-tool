@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -22,8 +23,11 @@ def wait_for_backend():
 
 
 def main():
+    python = shutil.which("python") or shutil.which("py")
+    if not python:
+        raise RuntimeError("未找到 Python 运行环境，请先安装 Python 3.12+")
     backend = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "assistant.backend.main:app", "--host", "127.0.0.1", "--port", "8788"],
+        [python, "-m", "uvicorn", "assistant.backend.main:app", "--host", "127.0.0.1", "--port", "8788"],
         cwd=ROOT,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
