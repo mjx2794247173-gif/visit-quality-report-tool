@@ -106,6 +106,8 @@ def test_refinement_request_can_read_only_last_answer() -> None:
     ]
 
     assert is_answer_refinement_request("写得有条理一点") is True
+    assert is_answer_refinement_request("把上一条分析结果推送到飞书") is False
+    assert is_answer_refinement_request("把上一条写成三段汇报") is True
     assert answer_refinement_source(history, "写得有条理一点") == "录入不规范54条，广东25条。"
     assert answer_refinement_source(history, "今天星期几") == ""
 

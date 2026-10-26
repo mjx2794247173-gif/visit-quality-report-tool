@@ -655,7 +655,9 @@ def current_calendar_context(now: datetime | None = None) -> dict[str, str]:
 
 
 def is_answer_refinement_request(question: str) -> bool:
-    return bool(re.search(r"上一条|刚才|改写|重写|重新整理|整理.{0,6}(?:一下|一点|清楚|条理)|有条理|简洁一点|详细一点|换种说法|润色", question))
+    refinement_action = r"改写|重写|重新整理|整理.{0,6}(?:一下|一点|清楚|条理)|有条理|简洁一点|详细一点|换种说法|润色|写成.{0,8}(?:段|条|表格|口语|汇报)"
+    referenced_rewrite = r"(?:上一条|刚才).{0,12}(?:改|整理|简化|展开|润色|重写|写成)"
+    return bool(re.search(refinement_action, question) or re.search(referenced_rewrite, question))
 
 
 def answer_refinement_source(history: list[dict[str, Any]], question: str) -> str:
@@ -820,7 +822,26 @@ async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
 
 async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
     intent = IntentInterpretation.model_validate(state.get("intent") or {})
-    if intent.domain == "data" and re.search(r"^(?:那|那么|再|然后)|换成|改成|同样|照旧|呢\s*$", state["question"].strip()):
+    publish_request = bool(re.search(r"(?:发送|推送|发布|发到).{0,8}飞书|飞书.{0,8}(?:发送|推送|发布)", state["question"]))
+    if publish_request:
+        has_previous_answer = any(str(item.get("answer") or "").strip() for item in state.get("recent", []))
+        intent.domain = "publishing" if has_previous_answer else "clarification"
+        if not has_previous_answer:
+            intent.missing_information = ["当前会话没有可发布的上一条已校验答案"]
+    question = state["question"].strip()
+    province_terms = [alias for province in state.get("schema_context", {}).get("provinces", []) for alias in province_aliases(str(province))]
+    condition_followup = bool(
+        re.search(r"^(?:那|那么|再看|改成|换成|然后看)", question)
+        and (
+            re.search(r"\d{1,4}[年月日号/.-]|本周|上周|昨天|前天|本月|上月|最近|过去|近\s*[一二三四五六七八九十\d]+[天日周]|前\s*[一二三四五六七八九十\d]+", question)
+            or any(term and term in question for term in province_terms)
+            or re.search(r"问题类型|站长|客户|前\s*[一二三四五六七八九十\d]+|top\s*\d+", question, re.I)
+        )
+    )
+    if condition_followup and not publish_request:
+        intent.domain = "data"
+        intent.uses_previous_query = True
+    elif intent.domain == "data" and re.search(r"^(?:那|那么|再|然后)|换成|改成|同样|照旧|呢\s*$", question):
         intent.uses_previous_query = True
     if intent.domain == "refinement" and not answer_refinement_source(state.get("recent", []), state["question"]):
         intent.domain = "clarification"
@@ -958,6 +979,32 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
                     start = end = datetime(int(single.group(1) or today.year), int(single.group(2)), int(single.group(3))).date()
                 except ValueError:
                     start = end = None
+            else:
+                numeric_range = re.search(
+                    r"(?<!\d)(?:(\d{4})[-/.])?(\d{1,2})[-/.](\d{1,2})\s*(?:到|至|~|—|–)\s*(?:(\d{4})[-/.])?(?:(\d{1,2})[-/.])?(\d{1,2})(?!\d)",
+                    question,
+                )
+                if numeric_range:
+                    year_from = int(numeric_range.group(1) or today.year)
+                    month_from = int(numeric_range.group(2))
+                    year_to = int(numeric_range.group(4) or year_from)
+                    month_to = int(numeric_range.group(5) or month_from)
+                    try:
+                        start = datetime(year_from, month_from, int(numeric_range.group(3))).date()
+                        end = datetime(year_to, month_to, int(numeric_range.group(6))).date()
+                    except ValueError:
+                        start = end = None
+                else:
+                    numeric_single = re.search(r"(?<!\d)(?:(\d{4})[-/.])?(\d{1,2})[-/.](\d{1,2})(?!\d)", question)
+                    if numeric_single:
+                        try:
+                            start = end = datetime(
+                                int(numeric_single.group(1) or today.year),
+                                int(numeric_single.group(2)),
+                                int(numeric_single.group(3)),
+                            ).date()
+                        except ValueError:
+                            start = end = None
     if start and end:
         normalized["date_from"] = start.isoformat()
         normalized["date_to"] = end.isoformat()
