@@ -16,9 +16,16 @@ CASES = [
     {
         "id": "inherit_date_change_province",
         "turns": [
-            ("10月12日广东省区问题最多的前5名站长是谁？", {"province": "广东省区", "date_from": "2026-10-12", "date_to": "2026-10-12"}),
-            ("那浙江呢？", {"province": "浙江省区", "date_from": "2026-10-12", "date_to": "2026-10-12"}),
-            ("改成10月11日。", {"province": "浙江省区", "date_from": "2026-10-11", "date_to": "2026-10-11"}),
+            ("10月12日广东省区问题最多的前5名站长是谁？", {"tool": "spreadsheet_query", "filters": {"province": "广东省区", "date_from": "2026-10-12", "date_to": "2026-10-12"}}),
+            ("那浙江呢？", {"tool": "spreadsheet_query", "filters": {"province": "浙江省区", "date_from": "2026-10-12", "date_to": "2026-10-12"}}),
+            ("改成10月11日。", {"tool": "spreadsheet_query", "filters": {"province": "浙江省区", "date_from": "2026-10-11", "date_to": "2026-10-11"}}),
+        ],
+    },
+    {
+        "id": "publish_only_after_validated_answer",
+        "turns": [
+            ("10月12日广东省区问题最多的前5名站长是谁？", {"tool": "spreadsheet_query", "filters": {"province": "广东省区"}}),
+            ("把上一条分析结果推送到飞书", {"tool": "feishu_publish_preview", "filters": {}}),
         ],
     },
 ]
@@ -33,7 +40,14 @@ def post_answer(base_url: str, session_id: str, question: str, planned: dict) ->
     plan = planned.get("plan", {})
     result = {"tool": planned.get("tool")}
     if planned.get("tool") == "spreadsheet_query":
-        result.update({"scope": plan, "rows": []})
+        result.update({
+            "scope": plan,
+            "filtered_rows": 0,
+            "total_rows": 0,
+            "rows": [],
+            "facets": {"issue_types": [], "stations": [], "station_province_counts": []},
+            "data_source": "脱敏评测数据",
+        })
     body = json.dumps({"question": question, "plan": plan, "tool_result": result, "session_id": session_id, "trace_id": planned.get("trace_id"), "workflow_id": planned.get("workflow_id"), "plan_signature": planned.get("plan_signature")}, ensure_ascii=False).encode()
     request = Request(f"{base_url.rstrip('/')}/api/answer", data=body, headers={"Content-Type": "application/json"}, method="POST")
     with urlopen(request, timeout=60):
@@ -50,10 +64,11 @@ def main() -> int:
         for index, (question, expected) in enumerate(case["turns"], start=1):
             actual = post_plan(args.base_url, session_id, question)
             filters = actual.get("plan", {}).get("filters", {})
-            passed = actual.get("tool") == "spreadsheet_query" and all(filters.get(key) == value for key, value in expected.items())
-            print(("PASS" if passed else "FAIL"), case["id"], f"turn={index}", json.dumps(filters, ensure_ascii=False))
+            expected_filters = expected.get("filters", {})
+            passed = actual.get("tool") == expected["tool"] and all(filters.get(key) == value for key, value in expected_filters.items())
+            print(("PASS" if passed else "FAIL"), case["id"], f"turn={index}", f"tool={actual.get('tool')}", json.dumps(filters, ensure_ascii=False))
             failures += not passed
-            if passed:
+            if passed and actual.get("tool") == "spreadsheet_query":
                 post_answer(args.base_url, session_id, question, actual)
     return int(bool(failures))
 

@@ -7,14 +7,14 @@ from assistant.backend.evaluation import matches_subset, score_plan_result, summ
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
 
 
-def test_eval_cases_cover_every_specialist_agent():
+def test_single_turn_eval_cases_cover_safe_standalone_routes():
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     assert len(cases) >= 8
     assert {case["expected_agent"] for case in cases} == {
         "data_agent",
         "knowledge_agent",
         "quality_agent",
-        "publishing_agent",
+        "clarification_agent",
     }
     assert len({case["id"] for case in cases}) == len(cases)
 

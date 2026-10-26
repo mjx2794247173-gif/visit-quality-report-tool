@@ -182,6 +182,15 @@ def test_relative_and_explicit_date_ranges_are_deterministic():
     assert normalize_relative_date_filters("10月15日的问题", {}, now) == {
         "date_from": "2026-10-15", "date_to": "2026-10-15",
     }
+    assert normalize_relative_date_filters("10/09全国虚假次数前五", {}, now) == {
+        "date_from": "2026-10-09", "date_to": "2026-10-09",
+    }
+    assert normalize_relative_date_filters("2026-10-09至2026-10-12", {}, now) == {
+        "date_from": "2026-10-09", "date_to": "2026-10-12",
+    }
+    assert normalize_relative_date_filters("10/09~12", {}, now) == {
+        "date_from": "2026-10-09", "date_to": "2026-10-12",
+    }
 
 
 def test_missing_previous_answer_becomes_clarification():
@@ -211,6 +220,31 @@ def test_colloquial_followup_forces_validated_memory_or_clarification():
         "question": "那浙江呢", "intent": base_intent, "recent": [], "working_memory": {},
     }))
     assert missing["intent"]["domain"] == "clarification"
+    changed_date = asyncio.run(validate_intent_node({
+        "question": "改成10月11日", "intent": {**base_intent, "domain": "clarification"}, "recent": [],
+        "schema_context": {"provinces": ["广东省区", "浙江省区"]},
+        "working_memory": {"last_tool": "spreadsheet_query"},
+    }))
+    assert changed_date["intent"]["domain"] == "data"
+    assert changed_date["intent"]["uses_previous_query"] is True
+
+
+def test_publishing_requires_a_previous_validated_answer():
+    intent = {
+        "domain": "publishing", "operation": "publish", "filters": {}, "groupings": [],
+        "metric": None, "order": None, "limit": None, "presentation_style": None,
+        "presentation_audience": None, "uses_previous_query": False,
+        "uses_previous_answer": True, "missing_information": [],
+    }
+    missing = asyncio.run(validate_intent_node({
+        "question": "把上一条结果推送到飞书", "intent": intent, "recent": [], "working_memory": {},
+    }))
+    assert missing["intent"]["domain"] == "clarification"
+    ready = asyncio.run(validate_intent_node({
+        "question": "把上一条结果推送到飞书", "intent": {**intent, "domain": "clarification"},
+        "recent": [{"answer": "已校验分析结果"}], "working_memory": {},
+    }))
+    assert ready["intent"]["domain"] == "publishing"
 
 
 def test_page_refresh_starts_a_new_backend_session():

@@ -68,9 +68,9 @@
     "expected_tool": "data_quality_check"
   },
   {
-    "id": "publishing_preview",
+    "id": "publishing_without_previous_result",
     "question": "把上一条分析结果推送到飞书",
-    "expected_agent": "publishing_agent",
-    "expected_tool": "feishu_publish_preview"
+    "expected_agent": "clarification_agent",
+    "expected_tool": "clarification"
   }
 ]
