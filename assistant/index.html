@@ -5,76 +5,88 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>质量通报助手</title>
   <style>
-    :root { --ink:#171717; --muted:#6f6b64; --paper:#171717; --card:#fffdf8; --line:#ded8cc; --orange:#e86628; --green:#315849; }
+    :root { --ink:#191816; --muted:#77716a; --paper:#f1eee7; --card:#fffefb; --line:#d8d2c8; --red:#d9272e; --red-dark:#a9151c; --green:#23775d; --rail:#20201e; }
     * { box-sizing:border-box; }
-    body { margin:0; color:var(--ink); background:var(--paper); font-family:"Microsoft YaHei", "Noto Sans SC", sans-serif; }
-    .top { background:#171717; color:#fff; padding:34px 7vw 42px; position:relative; overflow:hidden; }
-    .contact { position:absolute; top:20px; right:7vw; z-index:2; color:#c9c5bc; font-size:12px; }
-    .top:after { content:""; position:absolute; width:240px; height:240px; right:8vw; top:-130px; border:1px solid rgba(255,255,255,.18); border-radius:50%; box-shadow:0 0 0 28px rgba(255,255,255,.04),0 0 0 56px rgba(255,255,255,.03); }
-    .eyebrow { color:#ff9d63; font-size:12px; letter-spacing:.18em; text-transform:uppercase; margin-bottom:22px; }
-    h1 { margin:0; max-width:720px; font-size:clamp(34px,6vw,72px); line-height:1.02; letter-spacing:-.06em; }
-    .lead { max-width:560px; margin:22px 0 0; color:#c9c5bc; font-size:16px; line-height:1.8; }
-    main { width:min(1100px,86vw); margin:28px auto 72px; display:flex; flex-direction:column; gap:18px; }
-    .panel { background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 32px rgba(44,36,24,.06); }
-    .chat { height:650px; min-height:520px; display:flex; flex-direction:column; padding:0; order:3; overflow:hidden; border:2px solid var(--ink); box-shadow:0 18px 42px rgba(44,36,24,.12); position:relative; }
-    .chat:before { content:""; display:block; height:7px; background:var(--orange); flex-shrink:0; }
-    .panel-title { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px 24px 17px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#fffdf8 0%,#fff7ee 100%); }
-    .panel-title h2 { margin:0; font-size:21px; letter-spacing:-.04em; }
-    .panel-title h2:before { content:"✦"; color:var(--orange); font-size:15px; margin-right:8px; }
-    .status { color:var(--green); font-size:12px; }
-    .messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding:22px 22px 22px 22px; scroll-behavior:smooth; }
-    .messages::-webkit-scrollbar { width:7px; }
-    .messages::-webkit-scrollbar-thumb { background:#cfc8bb; border-radius:999px; }
-    .msg { max-width:88%; padding:14px 16px; border-radius:14px; font-size:14px; line-height:1.75; white-space:pre-line; position:relative; }
-    .answer-wrap { max-width:88%; align-self:flex-start; }
-    .answer-wrap .msg { max-width:100%; }
-    .assistant { background:#f0ede5; align-self:flex-start; }
-    .user { background:var(--ink); color:#fff; align-self:flex-end; }
-    .source { margin-top:10px; padding-top:9px; border-top:1px solid rgba(0,0,0,.1); color:var(--muted); font-size:11px; }
-    .quick { display:flex; flex-wrap:wrap; gap:8px; margin:0 24px 14px; padding:13px 14px 12px; border:1px solid #f0c5a9; border-radius:13px; background:#fff7ee; }
-    .quick:before { content:"试试这样问"; width:100%; color:#a64a1f; font-size:11px; font-weight:700; letter-spacing:.08em; }
-    .quick button { background:#fffdf9; border:1px solid #e8cbb8; border-radius:999px; padding:8px 11px; color:#4e4a43; cursor:pointer; font:inherit; font-size:12px; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease, color .18s ease; }
-    .quick button:hover { border-color:var(--orange); color:var(--orange); transform:translateY(-2px); box-shadow:0 5px 12px rgba(232,102,40,.14); }
-    .quick button:active, .send:active, .upload label:active, .demo-button:active { transform:translateY(1px) scale(.98); }
-    .composer { display:flex; gap:10px; flex-shrink:0; margin:0 24px 24px; padding:7px; border:1px solid #cfc5b6; border-radius:14px; background:#fff; box-shadow:0 5px 18px rgba(44,36,24,.08); }
-    input { min-width:0; flex:1; border:1px solid var(--line); border-radius:11px; background:#fff; color:var(--ink); padding:13px 14px; font:inherit; outline:none; }
-    input:focus { border-color:var(--orange); box-shadow:0 0 0 3px rgba(232,102,40,.12); }
-    .send { border:0; border-radius:10px; padding:0 23px; color:#fff; background:var(--orange); font-weight:700; cursor:pointer; transition:transform .18s ease, box-shadow .18s ease, background .18s ease; }
-    .send:hover { background:#d9551c; transform:translateY(-2px); box-shadow:0 7px 16px rgba(232,102,40,.28); }
-    .copy-answer { display:block; margin:4px 0 0 3px; width:18px; height:18px; border:0; border-radius:4px; padding:0; background:transparent; color:#aaa39a; font:inherit; font-size:12px; line-height:18px; cursor:pointer; opacity:.65; }
-    .copy-answer:hover { color:var(--orange); opacity:1; }
-    .answer-actions { display:flex; align-items:center; gap:8px; margin:5px 0 0 3px; }
-    .answer-actions .copy-answer { margin:0; }
-    .publish-answer { border:1px solid var(--line); border-radius:7px; padding:4px 9px; background:#fff; color:#5d574f; font:inherit; font-size:11px; cursor:pointer; }
-    .publish-answer:hover { border-color:var(--orange); color:var(--orange); }
-    .publish-answer:disabled { opacity:.55; cursor:wait; }
-    .side { padding:24px; order:2; }
-    .upload-panel { padding:24px; order:1; }
-    .upload-panel h2 { margin:0 0 8px; font-size:18px; }
-    .upload-panel > p { color:var(--muted); font-size:14px; line-height:1.8; margin:0; }
-    .side h2 { margin:0 0 18px; font-size:18px; }
-    .side p { color:var(--muted); font-size:14px; line-height:1.8; margin:0 0 20px; }
-    .rule { border-top:1px solid var(--line); padding:17px 0; }
-    .rule strong { display:block; font-size:14px; margin-bottom:6px; }
-    .rule span { color:var(--muted); font-size:12px; line-height:1.7; }
-    .notice { margin-top:18px; background:#fff1e8; border-left:3px solid var(--orange); padding:13px 14px; font-size:12px; line-height:1.7; }
-    .upload { margin:20px 0 6px; padding:16px; border:1px dashed #c8bfb1; border-radius:12px; background:#faf8f2; }
-    .upload label, .demo-button { display:inline-block; background:var(--ink); color:#fff; border-radius:9px; padding:10px 13px; font-size:13px; font-weight:700; cursor:pointer; border:0; font-family:inherit; transition:transform .18s ease, box-shadow .18s ease, background .18s ease; }
-    .upload label:hover { background:#302d29; transform:translateY(-2px); box-shadow:0 6px 14px rgba(23,23,23,.18); }
-    .demo-button { margin-left:7px; background:#fff; color:var(--ink); border:1px solid var(--line); }
-    .demo-button:hover { border-color:var(--orange); color:var(--orange); transform:translateY(-2px); box-shadow:0 6px 14px rgba(232,102,40,.12); }
+    html { background:var(--paper); }
+    body { margin:0; color:var(--ink); background:radial-gradient(circle at 85% 0%,rgba(217,39,46,.07),transparent 28%),var(--paper); font-family:"Noto Sans SC","Microsoft YaHei",sans-serif; min-height:100vh; }
+    button,input,select { font:inherit; }
+    button { -webkit-tap-highlight-color:transparent; }
+    .top { height:72px; padding:0 clamp(22px,4vw,64px); background:var(--rail); color:#fff; display:flex; align-items:center; gap:18px; position:relative; border-bottom:3px solid var(--red); }
+    .top:before { content:"VQ"; display:grid; place-items:center; width:38px; height:38px; background:var(--red); color:#fff; font-family:Georgia,serif; font-weight:700; letter-spacing:-.06em; }
+    .top-copy { display:flex; align-items:baseline; gap:14px; }
+    .eyebrow { color:#fff; font-family:Georgia,"Noto Serif SC",serif; font-size:20px; font-weight:700; }
+    h1 { margin:0; color:#9d9992; font-size:12px; font-weight:500; letter-spacing:.12em; }
+    .lead { display:none; }
+    .contact { margin-left:auto; color:#aaa69e; font-size:11px; }
+    main { width:min(1440px,calc(100vw - 48px)); margin:24px auto 36px; display:grid; grid-template-columns:310px minmax(0,1fr); grid-template-rows:auto 1fr; gap:16px; min-height:calc(100vh - 132px); }
+    .panel { background:var(--card); border:1px solid var(--line); }
+    .upload-panel { grid-column:1; grid-row:1; padding:26px 24px 24px; position:relative; overflow:hidden; animation:rise .48s ease both; }
+    .upload-panel:after { content:"01"; position:absolute; right:13px; top:6px; color:#ebe6de; font:700 54px/1 Georgia,serif; z-index:0; }
+    .upload-panel>* { position:relative; z-index:1; }
+    .upload-panel h2,.side h2 { margin:0 0 9px; font-family:Georgia,"Noto Serif SC",serif; font-size:20px; }
+    .upload-panel>p,.side>p { color:var(--muted); font-size:12px; line-height:1.75; margin:0; }
+    .upload { margin-top:20px; padding:17px; background:#f7f4ee; border:1px dashed #bfb6a9; }
+    .upload label,.demo-button { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border:1px solid var(--ink); border-radius:0; cursor:pointer; font-size:12px; font-weight:700; transition:.18s ease; }
+    .upload label { background:var(--ink); color:#fff; }
+    .upload label:before { content:"＋"; margin-right:5px; }
+    .upload label:hover { background:var(--red); border-color:var(--red); }
+    .demo-button { margin-left:5px; background:transparent; color:var(--ink); }
+    .demo-button:hover { color:var(--red); border-color:var(--red); }
     .upload input { display:none; }
-    .upload-status { margin-top:10px; color:var(--muted); font-size:12px; }
-    .province-filter { margin-top:10px; width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; font:inherit; color:var(--ink); }
-    @media (max-width:800px) { .top { padding-left:7vw; padding-right:7vw; } .contact { right:7vw; font-size:11px; } }
+    .upload-status { margin-top:13px; padding-top:12px; border-top:1px solid #e1dbd1; color:var(--muted); font-size:11px; line-height:1.6; }
+    .province-filter { margin-top:11px; width:100%; padding:10px; border:1px solid var(--line); border-radius:0; background:#fff; color:var(--ink); font-size:12px; }
+    .side { grid-column:1; grid-row:2; padding:25px 24px; animation:rise .48s .08s ease both; }
+    .side>p { margin-bottom:19px; }
+    .rule { display:grid; grid-template-columns:28px 1fr; padding:16px 0; border-top:1px solid var(--line); counter-increment:rule; }
+    .side { counter-reset:rule; }
+    .rule:before { content:"0" counter(rule); color:var(--red); font:700 12px Georgia,serif; padding-top:2px; }
+    .rule strong { display:block; font-size:13px; margin-bottom:5px; }
+    .rule span { grid-column:2; color:var(--muted); font-size:11px; line-height:1.7; }
+    .notice { margin-top:16px; padding:14px 15px; background:var(--rail); color:#d8d4cc; border-left:4px solid var(--red); font-size:11px; line-height:1.75; }
+    .chat { grid-column:2; grid-row:1/3; min-width:0; min-height:690px; height:calc(100vh - 132px); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 18px 50px rgba(37,32,25,.09); animation:rise .55s .05s ease both; }
+    .panel-title { min-height:84px; display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 26px; border-bottom:1px solid var(--line); background:#fff; }
+    .panel-title h2 { margin:0; font:700 24px/1.1 Georgia,"Noto Serif SC",serif; }
+    .panel-title h2:before { content:"LIVE / "; color:var(--red); font:700 10px/1 sans-serif; letter-spacing:.12em; vertical-align:middle; }
+    .panel-title span[style] { margin-left:0!important; color:var(--muted)!important; }
+    .status { padding:7px 10px; border:1px solid #b8d7cc; background:#f1f8f5; color:var(--green); font-size:11px; white-space:nowrap; }
+    .messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:20px; padding:30px clamp(22px,4vw,60px); scroll-behavior:smooth; background:linear-gradient(rgba(255,255,255,.82),rgba(255,255,255,.82)),repeating-linear-gradient(0deg,transparent 0 39px,#e8e3da 40px); }
+    .messages::-webkit-scrollbar { width:8px; }
+    .messages::-webkit-scrollbar-thumb { background:#c9c1b5; border:2px solid #fff; }
+    .msg { max-width:82%; padding:16px 18px; font-size:14px; line-height:1.85; white-space:pre-line; position:relative; }
+    .answer-wrap { width:min(880px,88%); max-width:88%; align-self:flex-start; }
+    .answer-wrap .msg { max-width:100%; }
+    .assistant { align-self:flex-start; background:#f1eee8; border-left:3px solid var(--red); }
+    .assistant:before { content:"分析助手"; display:block; margin-bottom:8px; color:var(--red-dark); font-size:10px; font-weight:700; letter-spacing:.12em; }
+    .user { align-self:flex-end; background:var(--rail); color:#fff; box-shadow:8px 8px 0 #d9d3ca; }
+    .source { margin-top:10px; padding-top:9px; border-top:1px solid rgba(0,0,0,.1); color:var(--muted); font-size:11px; }
+    .quick { display:flex; flex-wrap:wrap; gap:7px; padding:14px 25px; margin:0; border-top:1px solid var(--line); background:#f6f3ed; }
+    .quick:before { content:"QUICK QUERY"; width:100%; margin-bottom:2px; color:var(--red); font:700 10px Georgia,serif; letter-spacing:.15em; }
+    .quick button { padding:7px 10px; background:#fff; color:#56514b; border:1px solid #d4cdc2; border-radius:0; cursor:pointer; font-size:11px; transition:.16s ease; }
+    .quick button:hover { transform:translateY(-2px); border-color:var(--ink); color:var(--ink); box-shadow:3px 3px 0 #d6d0c6; }
+    .composer { display:flex; gap:0; flex-shrink:0; margin:0; padding:17px 24px 22px; border-top:1px solid var(--line); background:#fff; }
+    input { min-width:0; flex:1; padding:14px 15px; border:1px solid #aaa297; border-right:0; border-radius:0; background:#fff; color:var(--ink); outline:none; }
+    input:focus { border-color:var(--red); box-shadow:inset 3px 0 0 var(--red); }
+    .send { min-width:94px; padding:0 20px; border:0; border-radius:0; background:var(--red); color:#fff; font-weight:700; cursor:pointer; transition:.18s ease; }
+    .send:after { content:" →"; }
+    .send:hover { background:var(--red-dark); }
+    .copy-answer { display:block; margin:6px 0 0; width:24px; height:24px; padding:0; border:0; background:transparent; color:#928b82; cursor:pointer; opacity:.72; }
+    .copy-answer:hover { color:var(--red); opacity:1; }
+    .answer-actions { display:flex; align-items:center; gap:8px; margin-top:7px; }
+    .answer-actions .copy-answer { margin:0; }
+    .publish-answer { padding:5px 10px; border:1px solid var(--ink); border-radius:0; background:#fff; color:var(--ink); font-size:11px; cursor:pointer; }
+    .publish-answer:hover { background:var(--ink); color:#fff; }
+    .publish-answer:disabled { opacity:.55; cursor:wait; }
+    @keyframes rise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+    @media (max-width:960px) { main { width:min(920px,calc(100vw - 28px)); grid-template-columns:1fr; grid-template-rows:auto auto auto; } .upload-panel,.side,.chat { grid-column:1; grid-row:auto; } .chat { height:720px; } .side { display:none; } }
+    @media (max-width:620px) { .top { height:auto; min-height:70px; padding:14px 16px; } .top-copy { display:block; } h1,.contact { display:none; } main { width:100%; margin:0; gap:0; } .upload-panel { border-width:0 0 1px; } .chat { height:calc(100vh - 70px); min-height:580px; border-width:0; } .panel-title { padding:16px; } .panel-title h2 { font-size:20px; } .status { max-width:155px; white-space:normal; } .messages { padding:22px 16px; } .msg,.answer-wrap { max-width:94%; width:auto; } .quick { padding:12px 16px; max-height:106px; overflow:auto; } .composer { padding:13px 16px 17px; } .send { min-width:72px; } }
+    @media (prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
   </style>
 </head>
 <body>
   <header class="top">
-    <div class="contact">网页问题、数据问题、bug 请联系 mengjiaxi.1</div>
-    <div class="eyebrow">拜访质量分析智能助手</div>
-    <h1>让每一次拜访，<br>都有迹可循。</h1>
+    <div class="top-copy"><div class="eyebrow">拜访质量分析台</div><h1>VISIT QUALITY · DETERMINISTIC ANALYSIS</h1></div>
     <p class="lead">上传一份 CRM 导出的虚假拜访 Excel，随时提问。</p>
+    <div class="contact">内测版 · 问题反馈 mengjiaxi.1</div>
   </header>
   <main>
     <section class="panel upload-panel">
