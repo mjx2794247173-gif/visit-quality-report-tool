@@ -22,7 +22,7 @@
     .contact { margin-left:auto; color:var(--ink); font-size:10px; }
     main { display:contents; }
     .panel { position:relative; }
-    .upload-panel { grid-column:1; grid-row:2; margin:0 9px 0 18px; align-self:stretch; min-height:0; box-sizing:border-box; display:flex; flex-direction:column; padding:22px 20px; border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
+    .upload-panel { grid-column:1; grid-row:2; margin:0 9px 0 18px; align-self:stretch; min-height:0; box-sizing:border-box; display:flex; flex-direction:column; padding:22px 20px; border:2px solid var(--ink); border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
     .upload-panel:after { content:""; position:absolute; width:13px; height:13px; right:17px; top:16px; border-radius:50%; background:#fff; box-shadow:-20px 5px 0 var(--ink); }
     .upload-panel h2 { margin:0 0 7px; font-size:18px; }
     .upload-panel>p { margin:0; color:var(--ink); font-size:11px; line-height:1.7; }
@@ -53,7 +53,7 @@
     .rule span { color:var(--muted); font-size:9px; line-height:1.55; }
     .notice { margin-top:22px; padding:0; color:var(--muted); background:transparent; border-radius:0; font-size:9px; line-height:1.7; }
     .chat { grid-column:1/3; grid-row:3; min-width:0; min-height:700px; height:760px; margin:0 18px 18px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:26px; background:#fff; box-shadow:0 14px 40px rgba(0,0,0,.08); animation:rise .48s ease both; }
-    .panel-title { min-height:82px; padding:17px 25px; display:flex; align-items:center; justify-content:space-between; gap:18px; background:#fff; border-bottom:1px solid var(--line); }
+    .panel-title { min-height:82px; padding:17px 25px; display:flex; align-items:center; justify-content:space-between; gap:18px; background:#fff; border-bottom:2px solid var(--ink); }
     .panel-title h2 { margin:0; color:var(--deep); font-size:25px; font-weight:600; }
     .panel-title span[style] { margin-left:0!important; color:var(--muted)!important; }
     .status { padding:7px 11px; color:var(--ink); background:var(--orange-soft); border:1px solid var(--orange); border-radius:999px; font-size:10px; white-space:nowrap; }
@@ -67,13 +67,13 @@
     .assistant:before { content:"分析助手"; display:inline-block; margin-bottom:8px; padding:3px 8px; color:#fff; background:var(--orange); border-radius:999px; font-size:9px; font-weight:700; }
     .user { align-self:flex-end; color:#fff; background:var(--ink); border-radius:18px 18px 5px 18px; transform:rotate(-.25deg); }
     .source { margin-top:10px; padding-top:9px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
-    .quick { display:flex; gap:8px; padding:12px 20px; overflow-x:auto; border-top:1px solid var(--line); background:#fff; scrollbar-width:none; }
+    .quick { display:flex; gap:8px; padding:12px 20px; overflow-x:auto; border-top:2px solid var(--ink); background:#fff; scrollbar-width:none; }
     .quick:before { content:"试试这样问"; flex:0 0 auto; align-self:center; margin-right:3px; color:var(--muted); font-size:10px; }
     .quick button { flex:0 0 auto; min-height:34px; padding:7px 11px; color:var(--deep); border:0; border-radius:999px; cursor:pointer; font-size:10px; transition:.16s ease; }
     .quick button:nth-of-type(odd) { background:var(--orange-soft); border:1px solid var(--orange); }
     .quick button:nth-of-type(even) { background:#fff; border:1px solid var(--ink); }
     .quick button:hover { transform:translateY(-2px) rotate(-1deg); box-shadow:0 4px 0 var(--ink); }
-    .composer { display:flex; gap:8px; flex-shrink:0; margin:0; padding:13px 20px 18px; background:#fff; }
+    .composer { display:flex; gap:8px; flex-shrink:0; margin:0; padding:13px 20px 18px; background:#fff; border-top:2px solid var(--ink); }
     input { min-width:0; flex:1; padding:13px 15px; color:var(--deep); background:#f7f8fa; border:1px solid var(--line); border-radius:12px; outline:none; }
     input:focus { background:#fff; border:2px solid var(--orange); padding:12px 14px; }
     .send { min-width:90px; padding:0 19px; color:#fff; background:var(--ink); border:0; border-radius:999px; font-weight:600; cursor:pointer; transition:.18s ease; }
@@ -148,6 +148,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
     const messages = document.querySelector('#messages');
+    const forceLatestConversation = new MutationObserver(() => requestAnimationFrame(() => { messages.scrollTop=messages.scrollHeight; }));
+    forceLatestConversation.observe(messages, {childList:true, subtree:true, characterData:true});
     const input = document.querySelector('#question');
     const status = document.querySelector('#upload-status');
     const app = { rows: [], sourceRows: [], report: null, activeProvince: '', dateFrom: '', dateTo: '', lastAnswer: '', lastToolResult: null, feishuConfigured: false };
