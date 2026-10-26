@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "拜访质量分析助手",
+  "version": "0.1.0",
+  "identifier": "com.mengjiaxi.visitqualityassistant",
+  "build": { "frontendDist": "../web", "devUrl": "http://127.0.0.1:8788" },
+  "app": { "windows": [{ "title": "拜访质量分析助手", "width": 1440, "height": 900, "minWidth": 1000, "minHeight": 680, "resizable": true }], "security": { "csp": null } },
+  "bundle": { "active": true, "targets": ["msi", "nsis"], "createUpdaterArtifacts": false }
+}
