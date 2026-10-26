@@ -84,6 +84,8 @@
     .publish-answer { padding:6px 11px; color:#fff; background:var(--orange); border:0; border-radius:999px; font-size:10px; cursor:pointer; }
     .publish-answer:hover { background:var(--orange-dark); }
     .publish-answer:disabled { opacity:.55; cursor:wait; }
+    .publish-answer[data-feishu-publish],.publish-answer[data-jingme-publish] { font-size:0; }
+    .publish-answer[data-feishu-publish]:after,.publish-answer[data-jingme-publish]:after { content:"推送"; font-size:10px; }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
     @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
     @media (max-width:980px) { .app-shell { display:block; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; transform:none; } .side { display:none; } .chat { height:760px; margin:0 10px 10px; } }
@@ -101,7 +103,7 @@
     </header>
     <section class="panel upload-panel">
       <h2>上传文件</h2>
-      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls" hidden><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">筛选</button></div></div>
+      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls" hidden><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">筛选</button></div><div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div></div>
     </section>
     <aside class="panel side">
       <h2>上传后，你可以这样问</h2>
@@ -109,7 +111,6 @@
       <div class="rule"><strong>看谁的问题最多</strong><span>例如：华东省区哪位站长拍照不规范最多？</span></div>
       <div class="rule"><strong>看问题集中在哪里</strong><span>例如：当前省区哪类问题最多？哪些站长涉及多类问题？</span></div>
       <div class="rule"><strong>看问题是否持续</strong><span>例如：哪些站长连续多天出现问题？哪些客户被重复拜访？</span></div>
-      <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
     </aside>
   </aside>
   <main>
@@ -127,7 +128,7 @@
         <button data-q="这份 Excel 数据完整吗？">检查数据完整性</button>
         <button data-q="哪些站长涉及不止一类问题？">多类问题站长</button>
       </div>
-      <form class="composer" id="composer"><input id="question" placeholder="例如：哪些站长连续多天出现问题？" autocomplete="off"><button class="send">发送</button><select id="jingme-target-type" title="京ME发送目标"><option value="group">京ME群</option><option value="erp">ERP个人</option></select><input id="jingme-target" placeholder="群号或ERP" autocomplete="off"><button class="send" type="button" id="send-jingme">推送京ME</button></form>
+      <form class="composer" id="composer"><input id="question" placeholder="例如：哪些站长连续多天出现问题？" autocomplete="off"><button class="send">发送</button></form>
     </section>
   </main>
   </div>
@@ -218,8 +219,9 @@
     async function loadServiceStatus() { try { const response=await fetch(`${API_BASE}/api/health`); const data=await response.json(); app.feishuConfigured=Boolean(data.feishu?.configured); } catch {} }
     async function publishToFeishu(button) { const content=button.dataset.publishPrepared==='true'?(app.pendingFeishuContent||''):(button.closest('.answer-wrap')?.querySelector('.msg')?.textContent?.trim()||''); if(!content)return; const preview=content.length>180?`${content.slice(0,180)}…`:content; if(!window.confirm(`确认把以下回答推送到已配置的飞书目标？\n\n${preview}`))return; button.disabled=true; button.textContent='推送中…'; try { const response=await fetch(`${API_BASE}/api/feishu/send`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,confirmed:true,session_id:SESSION_ID})}); const data=await response.json(); if(!response.ok)throw new Error(data.detail||data.error||'发送失败'); button.textContent='已推送'; } catch(error) { button.disabled=false; button.textContent='推送飞书'; window.alert(`飞书推送失败：${error.message}`); } }
     async function publishToJingMe(button) { const content=button.closest('.answer-wrap')?.querySelector('.msg')?.textContent?.trim()||''; const type=document.querySelector('#jingme-target-type').value;const target=document.querySelector('#jingme-target').value.trim();if(!app.lastToolResult||!content){window.alert('请先完成一次 Excel 确定性分析。');return;}if(!target){window.alert('请填写京ME群号或 ERP。');return;}if(!window.confirm(`确认把当前网页回答原文发送到${type==='group'?'京ME群':'ERP '+target}？`))return;const payload={analysis_result:app.lastToolResult,content,confirmed:true,session_id:SESSION_ID};payload[type==='group'?'group_id':'erp']=target;button.disabled=true;button.textContent='推送中…';try{const response=await fetch(`${API_BASE}/api/jingme/send`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.detail||data.error||'发送失败');button.textContent=data.dry_run?'已完成 dry-run':'已推送';}catch(error){button.disabled=false;button.textContent='推送京ME';window.alert(`京ME推送失败：${error.message}`);} }
+    function publishToJingMe(){window.alert('推送方式弹窗将在下一步配置。');}
     document.querySelector('#composer').addEventListener('submit',e=>{e.preventDefault();const q=input.value;input.value='';askWithPlanner(q);}); document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>askWithPlanner(b.dataset.q)));
-    document.querySelector('#send-jingme').addEventListener('click',()=>{if(!app.lastToolResult||!app.lastAnswer){window.alert('请先完成一次 Excel 确定性分析。');return;}const type=document.querySelector('#jingme-target-type').value;const target=document.querySelector('#jingme-target').value.trim();if(!target){window.alert('请填写京ME群号或 ERP。');return;}const payload={analysis_result:app.lastToolResult,content:app.lastAnswer,confirmed:true,session_id:SESSION_ID};payload[type==='group'?'group_id':'erp']=target;if(!window.confirm(`确认把当前网页回答原文发送到${type==='group'?'京ME群':'ERP '+target}？`))return;fetch(`${API_BASE}/api/jingme/send`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.detail||data.error||'发送失败');window.alert(data.dry_run?'京ME dry-run 已完成':`京ME已发送，共 ${data.message_count||1} 条`);}).catch(error=>window.alert(`京ME推送失败：${error.message}`));});
+    document.querySelector('#send-jingme')?.addEventListener('click',()=>{});
     messages.addEventListener('click',e=>{if(e.target.matches('[data-copy-answer]')){const content=e.target.closest('.answer-wrap')?.querySelector('.msg')?.textContent||app.lastAnswer;navigator.clipboard?.writeText(content);e.target.textContent='✓';setTimeout(()=>e.target.textContent='⧉',1200);}if(e.target.matches('[data-feishu-publish]'))publishToFeishu(e.target);if(e.target.matches('[data-jingme-publish]'))publishToJingMe(e.target);});
     document.querySelector('#excel').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;status.textContent=`正在读取：${f.name}`;try{const rows=await parseWorkbook(f);const required=['拜访编码','拜访人ERP','拜访人主导省区','实际拜访时间','质检问题类型'];const headers=Object.keys(rows[0]||{});const missing=required.filter(x=>!headers.includes(x));if(missing.length)throw new Error(`缺少字段：${missing.join('、')}`);resetSessionId();app.sourceRows=rows;app.rows=rows;app.report=makeReport(rows);prepareProvinceFilter();status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条可分析记录，请设置筛选条件。`;}catch(err){app.report=null;status.textContent=`读取失败：${err.message}`;}});
     document.querySelector('#demo-data').addEventListener('click',()=>{resetSessionId();app.sourceRows=sampleRows();app.rows=app.sourceRows;app.report=makeReport(app.rows);prepareProvinceFilter();status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条示例记录，请设置筛选条件。`;});
