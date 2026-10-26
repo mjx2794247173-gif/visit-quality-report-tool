@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>质量通报助手</title>
   <style>
-    :root { --ink:#111; --deep:#111; --muted:#595959; --orange:#ff6b2b; --orange-dark:#e65317; --orange-soft:#fff0e8; --line:#dedede; --canvas:#fff; }
+    :root { --ink:#111; --deep:#111; --muted:#595959; --orange:#ffb084; --orange-dark:#f28a58; --orange-soft:#fff0e8; --line:#dedede; --canvas:#fff; }
     * { box-sizing:border-box; }
     html,body { min-height:100%; }
     body { margin:0; color:var(--ink); background:#f7f7f7; font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
@@ -22,11 +22,11 @@
     .contact { margin-left:auto; color:var(--ink); font-size:10px; }
     main { display:contents; }
     .panel { position:relative; }
-    .upload-panel { grid-column:1; grid-row:2; margin:22px 14px 0 20px; align-self:start; padding:22px 20px; border-radius:24px; background:var(--orange); color:var(--deep); transform:rotate(-1deg); box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
+    .upload-panel { grid-column:1; grid-row:2; margin:22px 14px 0 20px; align-self:start; min-height:340px; display:flex; flex-direction:column; padding:22px 20px; border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
     .upload-panel:after { content:""; position:absolute; width:13px; height:13px; right:17px; top:16px; border-radius:50%; background:#fff; box-shadow:-20px 5px 0 var(--ink); }
     .upload-panel h2 { margin:0 0 7px; font-size:18px; }
     .upload-panel>p { margin:0; color:var(--ink); font-size:11px; line-height:1.7; }
-    .upload { margin-top:17px; }
+    .upload { margin-top:24px; display:flex; flex:1; min-height:205px; flex-direction:column; align-items:flex-start; }
     .upload label,.demo-button { min-height:39px; padding:9px 13px; border-radius:999px; cursor:pointer; font-size:11px; font-weight:600; transition:.18s ease; }
     .upload label { display:inline-flex; align-items:center; color:#fff; background:var(--ink); border:1px solid var(--ink); }
     .upload label:before { content:"＋"; margin-right:5px; font-size:15px; }
@@ -34,9 +34,9 @@
     .demo-button { margin-left:4px; color:var(--deep); background:#fff; border:1px solid var(--ink); }
     .demo-button:hover { background:#fff; }
     .upload input { display:none; }
-    .upload-status { margin-top:12px; color:var(--ink); font-size:10px; line-height:1.6; }
+    .upload-status { margin-top:auto; color:var(--ink); font-size:10px; line-height:1.6; }
     .province-filter { width:100%; margin-top:10px; padding:10px 12px; color:var(--deep); background:#fff; border:1px solid var(--ink); border-radius:12px; outline:none; font-size:11px; }
-    .side { grid-column:1; grid-row:2; align-self:start; margin:438px 14px 20px 20px; padding:0; z-index:1; }
+    .side { grid-column:1; grid-row:2; align-self:start; margin:360px 14px 20px 20px; padding:0; z-index:1; }
     .side h2 { margin:0 0 6px; padding:0 5px; color:var(--deep); font-size:15px; }
     .side>p { margin:0 0 12px; padding:0 5px; color:var(--muted); font-size:10px; line-height:1.6; }
     .rule { margin-bottom:9px; padding:13px 15px; border:1px solid var(--ink); border-radius:15px; transition:.18s ease; box-shadow:3px 3px 0 var(--ink); }
@@ -81,7 +81,7 @@
     .publish-answer:hover { background:var(--orange-dark); }
     .publish-answer:disabled { opacity:.55; cursor:wait; }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
-    @keyframes pop { from { opacity:0; transform:scale(.94) rotate(-3deg); } to { opacity:1; transform:scale(1) rotate(-1deg); } }
+    @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
     @media (max-width:980px) { .app-shell { display:block; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; transform:none; } .side { display:none; } .chat { height:760px; margin:0 10px 10px; } }
     @media (max-width:620px) { h1 { display:none; } .top { min-height:66px; } .top:before { width:36px; height:36px; } .eyebrow { font-size:18px; } .upload-panel { margin:10px; padding:17px; } .chat { height:calc(100vh - 258px); min-height:550px; border-radius:20px 20px 0 0; } .panel-title { min-height:72px; padding:14px 16px; } .panel-title h2 { font-size:21px; } .status { max-width:145px; white-space:normal; } .messages { padding:22px 15px; } .msg,.answer-wrap { max-width:94%; width:auto; } .quick { padding:10px 12px; } .composer { padding:11px 13px 14px; } .send { min-width:70px; } }
     @media (prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
