@@ -23,11 +23,16 @@ def wait_for_backend():
 
 
 def main():
-    python = shutil.which("python") or shutil.which("py")
-    if not python:
+    py_launcher = shutil.which("py")
+    python = shutil.which("python")
+    if py_launcher:
+        python_command = [py_launcher, "-3.12"]
+    elif python:
+        python_command = [python]
+    else:
         raise RuntimeError("未找到 Python 运行环境，请先安装 Python 3.12+")
     backend = subprocess.Popen(
-        [python, "-m", "uvicorn", "assistant.backend.main:app", "--host", "127.0.0.1", "--port", "8788"],
+        [*python_command, "-m", "uvicorn", "assistant.backend.main:app", "--host", "127.0.0.1", "--port", "8788"],
         cwd=ROOT,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
