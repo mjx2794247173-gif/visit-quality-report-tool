@@ -167,6 +167,21 @@ def test_relative_and_explicit_date_ranges_are_deterministic():
     assert normalize_relative_date_filters("10月15号到20号", {}, now) == {
         "date_from": "2026-10-15", "date_to": "2026-10-20",
     }
+    assert normalize_relative_date_filters("过去十五天", {}, now) == {
+        "date_from": "2026-10-09", "date_to": "2026-10-23",
+    }
+    assert normalize_relative_date_filters("近一周", {}, now) == {
+        "date_from": "2026-10-17", "date_to": "2026-10-23",
+    }
+    assert normalize_relative_date_filters("前天的问题", {}, now) == {
+        "date_from": "2026-10-21", "date_to": "2026-10-21",
+    }
+    assert normalize_relative_date_filters("上个月的问题", {}, now) == {
+        "date_from": "2026-09-01", "date_to": "2026-09-30",
+    }
+    assert normalize_relative_date_filters("10月15日的问题", {}, now) == {
+        "date_from": "2026-10-15", "date_to": "2026-10-15",
+    }
 
 
 def test_missing_previous_answer_becomes_clarification():
@@ -178,6 +193,24 @@ def test_missing_previous_answer_becomes_clarification():
     }
     state = asyncio.run(validate_intent_node({"question": "把结果写成三段", "intent": intent, "recent": [], "working_memory": {}}))
     assert state["intent"]["domain"] == "clarification"
+
+
+def test_colloquial_followup_forces_validated_memory_or_clarification():
+    base_intent = {
+        "domain": "data", "operation": "query", "filters": {"province": "浙江省区"}, "groupings": [],
+        "metric": None, "order": None, "limit": None, "presentation_style": None,
+        "presentation_audience": None, "uses_previous_query": False,
+        "uses_previous_answer": False, "missing_information": [],
+    }
+    continued = asyncio.run(validate_intent_node({
+        "question": "那浙江呢", "intent": base_intent, "recent": [],
+        "working_memory": {"last_tool": "spreadsheet_query"},
+    }))
+    assert continued["intent"]["uses_previous_query"] is True
+    missing = asyncio.run(validate_intent_node({
+        "question": "那浙江呢", "intent": base_intent, "recent": [], "working_memory": {},
+    }))
+    assert missing["intent"]["domain"] == "clarification"
 
 
 def test_page_refresh_starts_a_new_backend_session():
@@ -203,6 +236,7 @@ def test_model_cannot_invent_province_filter_from_schema():
     assert normalize_province_filter("生成本周完整报告", "江苏省区", {"default_scope": "全部省区"}) is None
     assert normalize_province_filter("查看江苏的问题", "江苏省区", {"default_scope": "全部省区"}) == "江苏省区"
     assert normalize_province_filter("生成本周报告", None, {"default_scope": "湖北省区"}) == "湖北省区"
+    assert normalize_province_filter("查看上海的问题", "上海区", {"default_scope": "全部省区"}) == "上海区"
 
 
 def test_refinement_followup_bypasses_business_replanning(monkeypatch):

@@ -831,6 +831,8 @@ async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
 
 async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
     intent = IntentInterpretation.model_validate(state.get("intent") or {})
+    if intent.domain == "data" and re.search(r"^(?:那|那么|再|然后)|换成|改成|同样|照旧|呢\s*$", state["question"].strip()):
+        intent.uses_previous_query = True
     if intent.domain == "refinement" and not answer_refinement_source(state.get("recent", []), state["question"]):
         intent.domain = "clarification"
         intent.missing_information = ["当前会话没有可改写的上一条答案"]
@@ -874,8 +876,17 @@ def normalize_province_filter(question: str, province: str | None, schema_contex
         return default_scope
     if not province:
         return None
-    aliases = {province, province.replace("省区", ""), province.replace("地区", "")}
+    aliases = province_aliases(province)
     return province if any(alias and alias in question for alias in aliases) else None
+
+
+def province_aliases(province: str) -> set[str]:
+    """Return safe colloquial aliases without reducing names to one character."""
+    aliases = {province}
+    base = re.sub(r"(?:省区|地区|区)$", "", province)
+    if len(base) >= 2:
+        aliases.add(base)
+    return aliases
 
 
 def normalize_province_filters(question: str, schema_context: dict[str, Any], *candidates: str) -> tuple[str | None, list[str]]:
@@ -887,7 +898,7 @@ def normalize_province_filters(question: str, schema_context: dict[str, Any], *c
     pool = list(dict.fromkeys(available + [item for item in candidates if item]))
     matched = []
     for province in pool:
-        aliases = {province, province.replace("省区", ""), province.replace("地区", "")}
+        aliases = province_aliases(province)
         if any(alias and alias in question for alias in aliases):
             matched.append(province)
     matched = list(dict.fromkeys(matched))
@@ -901,14 +912,25 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
     normalized.pop("date_to", None)
     today = (now or datetime.now().astimezone()).date()
     start = end = None
-    recent_match = re.search(r"最近\s*([一二三四五六七八九十\d]+)\s*天", question)
-    chinese_numbers = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
+    recent_match = re.search(r"(?:最近|近|过去)\s*([一二三四五六七八九十\d]+)\s*[天日]", question)
+    chinese_digits = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9}
+    def parse_days(token: str) -> int:
+        if token.isdigit():
+            return int(token)
+        if token == "十":
+            return 10
+        if "十" in token:
+            tens, ones = token.split("十", 1)
+            return (chinese_digits.get(tens, 1) * 10) + chinese_digits.get(ones, 0)
+        return chinese_digits.get(token, 0)
     if recent_match:
-        token = recent_match.group(1)
-        days = int(token) if token.isdigit() else chinese_numbers.get(token, 0)
+        days = parse_days(recent_match.group(1))
         if 1 <= days <= 31:
             end = today
             start = today - timedelta(days=days - 1)
+    elif re.search(r"(?:最近|近|过去)\s*(?:一|1)\s*周", question):
+        end = today
+        start = today - timedelta(days=6)
     elif re.search(r"本周|这周|本星期|这个星期", question):
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=6)
@@ -917,12 +939,18 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
         start = end - timedelta(days=6)
     elif re.search(r"昨天|昨日", question):
         start = end = today - timedelta(days=1)
+    elif re.search(r"前天", question):
+        start = end = today - timedelta(days=2)
     elif re.search(r"今天|今日|当天", question):
         start = end = today
     elif re.search(r"本月|这个月", question):
         start = today.replace(day=1)
         next_month = (start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1))
         end = next_month - timedelta(days=1)
+    elif re.search(r"上月|上个月", question):
+        this_month = today.replace(day=1)
+        end = this_month - timedelta(days=1)
+        start = end.replace(day=1)
     else:
         explicit = re.search(r"(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]?\s*(?:到|至|—|-)\s*(?:(\d{1,2})月)?(\d{1,2})[日号]?", question)
         if explicit:
