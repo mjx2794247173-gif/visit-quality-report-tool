@@ -823,7 +823,7 @@ async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
     if intent.domain == "refinement" and not answer_refinement_source(state.get("recent", []), state["question"]):
         intent.domain = "clarification"
         intent.missing_information = ["当前会话没有可改写的上一条答案"]
-    if intent.uses_previous_query and not state.get("working_memory", {}).get("last_tool"):
+    if intent.uses_previous_query and state.get("working_memory", {}).get("last_tool") != "spreadsheet_query":
         intent.domain = "clarification"
         intent.missing_information = ["当前会话没有可继续使用的上一轮查询条件"]
     return {**state, "intent": intent.model_dump()}
@@ -886,6 +886,8 @@ def normalize_province_filters(question: str, schema_context: dict[str, Any], *c
 def normalize_relative_date_filters(question: str, filters: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     """Resolve common relative dates deterministically instead of trusting model arithmetic."""
     normalized = dict(filters)
+    normalized.pop("date_from", None)
+    normalized.pop("date_to", None)
     today = (now or datetime.now().astimezone()).date()
     start = end = None
     recent_match = re.search(r"最近\s*([一二三四五六七八九十\d]+)\s*天", question)
@@ -921,6 +923,13 @@ def normalize_relative_date_filters(question: str, filters: dict[str, Any], now:
                 end = datetime(year, month_to, int(explicit.group(5))).date()
             except ValueError:
                 start = end = None
+        else:
+            single = re.search(r"(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]", question)
+            if single:
+                try:
+                    start = end = datetime(int(single.group(1) or today.year), int(single.group(2)), int(single.group(3))).date()
+                except ValueError:
+                    start = end = None
     if start and end:
         normalized["date_from"] = start.isoformat()
         normalized["date_to"] = end.isoformat()
@@ -932,30 +941,48 @@ def merge_validated_intent_into_spreadsheet_plan(
     schema_context: dict[str, Any],
     intent_payload: dict[str, Any],
     plan: dict[str, Any],
+    working_memory: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Merge interpreter output without allowing model-invented data filters."""
+    """Merge explicit conditions and validated prior state; discard invented filters."""
     intent = IntentInterpretation.model_validate(intent_payload)
     merged = SpreadsheetPlan.model_validate(plan).model_dump()
+    previous = WorkingMemory.model_validate(working_memory or {})
+    inherit = intent.uses_previous_query and previous.last_tool == "spreadsheet_query"
+    previous_filters = previous.filters.model_dump() if inherit else SpreadsheetFilters().model_dump()
     filters = merged["filters"]
     interpreted = intent.filters.model_dump()
     province_candidates = [interpreted.get("province"), filters.get("province"), *interpreted.get("provinces", []), *filters.get("provinces", [])]
     issue_type = interpreted.get("issue_type") or filters.get("issue_type")
     station_erp = interpreted.get("station_erp") or filters.get("station_erp")
     filters["province"], filters["provinces"] = normalize_province_filters(question, schema_context, *[item for item in province_candidates if item])
-    filters["issue_type"] = normalize_issue_type(question, issue_type)
-    filters["station_erp"] = station_erp if station_erp and station_erp in question else filters.get("station_erp")
-    for key in ("date_from", "date_to"):
-        if interpreted.get(key):
-            filters[key] = interpreted[key]
-    merged["filters"] = normalize_relative_date_filters(question, filters)
+    if not filters["province"] and not filters["provinces"] and inherit and not re.search(r"全部省区|所有省区|不限省区", question):
+        filters["province"] = previous_filters.get("province")
+        filters["provinces"] = previous_filters.get("provinces", [])
+    explicit_issue = normalize_issue_type(question, issue_type)
+    filters["issue_type"] = explicit_issue or (previous_filters.get("issue_type") if inherit and not re.search(r"全部问题|所有问题|不限问题", question) else None)
+    explicit_station = station_erp if station_erp and station_erp.lower() in question.lower() else None
+    filters["station_erp"] = explicit_station or (previous_filters.get("station_erp") if inherit and not re.search(r"全部站长|所有站长|不限站长", question) else None)
+    deterministic_dates = normalize_relative_date_filters(question, filters)
+    if "date_from" not in deterministic_dates and inherit and not re.search(r"全部时间|所有时间|不限时间", question):
+        deterministic_dates["date_from"] = previous_filters.get("date_from")
+        deterministic_dates["date_to"] = previous_filters.get("date_to")
+    merged["filters"] = deterministic_dates
     if intent.groupings:
         merged["group_by"] = intent.groupings[0]
+    elif inherit and previous.group_by:
+        merged["group_by"] = previous.group_by
     if intent.metric:
         merged["metric"] = intent.metric
+    elif inherit and previous.metric:
+        merged["metric"] = previous.metric
     if intent.order:
         merged["order"] = intent.order
+    elif inherit and previous.order:
+        merged["order"] = previous.order
     if intent.limit:
         merged["limit"] = intent.limit
+    elif inherit and previous.limit:
+        merged["limit"] = previous.limit
     merged["limit"] = normalize_spreadsheet_limit(question, merged["limit"])
     return SpreadsheetPlan.model_validate(merged).model_dump()
 
@@ -976,7 +1003,7 @@ async def data_agent(state: MultiAgentState) -> MultiAgentState:
     if query_plan is None:
         raise RuntimeError("Data Agent 返回了无效的 Excel 查询计划，请重试")
     plan = merge_validated_intent_into_spreadsheet_plan(
-        state["question"], state.get("schema_context", {}), state["intent"], query_plan.model_dump()
+        state["question"], state.get("schema_context", {}), state["intent"], query_plan.model_dump(), state.get("working_memory", {})
     )
     return {**state, "tool": tool, "plan": plan}
 

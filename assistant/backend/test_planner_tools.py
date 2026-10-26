@@ -116,6 +116,49 @@ def test_multi_province_comparison_keeps_every_explicit_scope():
     assert merged["filters"]["provinces"] == ["广东省区", "浙江省区"]
 
 
+def test_followup_replaces_only_explicit_condition_and_inherits_the_rest():
+    intent = {
+        "domain": "data", "operation": "query", "filters": {"province": "浙江省区"},
+        "groupings": [], "metric": None, "order": None, "limit": None,
+        "presentation_style": None, "presentation_audience": None,
+        "uses_previous_query": True, "uses_previous_answer": False, "missing_information": [],
+    }
+    previous = {
+        "last_tool": "spreadsheet_query",
+        "filters": {"province": "广东省区", "date_from": "2026-10-01", "date_to": "2026-10-07", "issue_type": "重复拜访"},
+        "group_by": "station_erp", "metric": "visit_count", "order": "desc", "limit": 5,
+    }
+    merged = merge_validated_intent_into_spreadsheet_plan(
+        "那浙江呢", {"provinces": ["广东省区", "浙江省区"]}, intent,
+        {"filters": {"station_erp": "invented.erp", "date_from": "2030-01-01", "date_to": "2030-01-02"}, "group_by": "issue_type", "metric": "distinct_date_count", "order": "asc", "limit": 20},
+        previous,
+    )
+    assert merged["filters"] == {
+        "province": "浙江省区", "provinces": [], "date_from": "2026-10-01", "date_to": "2026-10-07",
+        "station_erp": None, "issue_type": "重复拜访",
+    }
+    assert (merged["group_by"], merged["metric"], merged["order"], merged["limit"]) == (
+        "station_erp", "visit_count", "desc", 5,
+    )
+
+
+def test_model_cannot_invent_date_or_erp_without_user_or_memory_provenance():
+    intent = {
+        "domain": "data", "operation": "query",
+        "filters": {"date_from": "2030-01-01", "date_to": "2030-01-02", "station_erp": "invented.erp"},
+        "groupings": ["issue_type"], "metric": "visit_count", "order": "desc", "limit": 10,
+        "presentation_style": None, "presentation_audience": None,
+        "uses_previous_query": False, "uses_previous_answer": False, "missing_information": [],
+    }
+    merged = merge_validated_intent_into_spreadsheet_plan(
+        "哪些问题最多", {}, intent,
+        {"filters": {"date_from": "2030-01-01", "date_to": "2030-01-02", "station_erp": "invented.erp"}, "group_by": "issue_type", "metric": "visit_count", "order": "desc", "limit": 10},
+    )
+    assert merged["filters"]["date_from"] is None
+    assert merged["filters"]["date_to"] is None
+    assert merged["filters"]["station_erp"] is None
+
+
 def test_relative_and_explicit_date_ranges_are_deterministic():
     now = datetime(2026, 10, 23, 9, 0)
     assert normalize_relative_date_filters("最近三天的问题", {}, now) == {
