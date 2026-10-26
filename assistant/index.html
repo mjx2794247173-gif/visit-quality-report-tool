@@ -22,7 +22,7 @@
     .contact { margin-left:auto; color:var(--ink); font-size:10px; }
     main { display:contents; }
     .panel { position:relative; }
-    .upload-panel { grid-column:1; grid-row:2; margin:22px 14px 0 20px; align-self:start; min-height:340px; display:flex; flex-direction:column; padding:22px 20px; border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
+    .upload-panel { grid-column:1; grid-row:2; margin:22px 14px 0 20px; align-self:start; height:420px; min-height:420px; box-sizing:border-box; display:flex; flex-direction:column; padding:22px 20px; border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
     .upload-panel:after { content:""; position:absolute; width:13px; height:13px; right:17px; top:16px; border-radius:50%; background:#fff; box-shadow:-20px 5px 0 var(--ink); }
     .upload-panel h2 { margin:0 0 7px; font-size:18px; }
     .upload-panel>p { margin:0; color:var(--ink); font-size:11px; line-height:1.7; }
@@ -39,8 +39,9 @@
     .scope-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; margin-top:10px; }
     .scope-controls input { display:block; min-width:0; width:100%; padding:9px 10px; color:var(--deep); background:#fff; border:1px solid var(--ink); border-radius:10px; font-size:10px; }
     .scope-controls button { grid-column:1/-1; min-height:34px; color:#fff; background:var(--ink); border:0; border-radius:999px; cursor:pointer; font-size:10px; font-weight:700; }
+    .province-filter[hidden], .scope-controls[hidden] { display:none !important; }
     .scope-controls button:hover { background:var(--orange-dark); }
-    .side { grid-column:1; grid-row:2; align-self:start; margin:382px 14px 20px 20px; padding:0; z-index:1; }
+    .side { grid-column:1; grid-row:2; align-self:start; margin:462px 14px 20px 20px; padding:0; z-index:1; }
     .side h2 { margin:0 0 6px; padding:0 5px; color:var(--deep); font-size:15px; }
     .side>p { margin:0 0 12px; padding:0 5px; color:var(--muted); font-size:10px; line-height:1.6; }
     .rule { margin-bottom:9px; padding:13px 15px; border:1px solid var(--ink); border-radius:15px; transition:.18s ease; box-shadow:3px 3px 0 var(--ink); }
