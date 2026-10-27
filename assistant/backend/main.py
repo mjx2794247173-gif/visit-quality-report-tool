@@ -1435,8 +1435,7 @@ async def call_deepseek(question: str, context: str, knowledge: list[dict[str, s
 async def call_deepseek_function_calling(question: str, context: str, history: list[dict[str, str]] | None = None) -> tuple[str, str, dict[str, Any] | None, list[str]]:
     """Two-pass DeepSeek flow: select tool, execute locally, then explain result."""
     if not API_KEY:
-        selected = choose_tool(question, context)
-        return "后端尚未配置 DEEPSEEK_API_KEY。你仍可以使用页面内的确定性分析功能。", selected["tool"], selected.get("result"), []
+        return "后端尚未配置 DEEPSEEK_API_KEY，暂时无法启动 General Agent。", "direct_answer", {"tool":"direct_answer","validation":{"valid":True}}, []
     headers = {"Authorization": f"Bearer {API_KEY}"}
     memory = ""
     if history:
