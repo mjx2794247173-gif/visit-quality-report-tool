@@ -11,22 +11,22 @@
     body { margin:0; color:var(--ink); background:#f7f7f7; font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
     button,input,select { font:inherit; }
     button { -webkit-tap-highlight-color:transparent; }
-    .app-shell { min-height:100vh; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:76px auto minmax(700px,1fr); column-gap:0; row-gap:18px; }
+    .app-shell { min-height:100vh; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:76px auto auto auto; column-gap:0; row-gap:18px; }
     .workspace-rail { display:contents; }
     .top { grid-column:1/3; grid-row:1; display:flex; align-items:center; gap:22px; padding:0 28px; background:var(--orange); border-bottom:3px solid var(--ink); position:relative; z-index:5; }
     .top:before { content:"质"; display:grid; place-items:center; width:42px; height:42px; border-radius:12px; background:#fff; color:var(--ink); font-size:20px; font-weight:700; transform:rotate(-4deg); box-shadow:4px 4px 0 var(--ink); }
     .top-copy { display:flex; align-items:baseline; gap:14px; }
-    .eyebrow { color:var(--deep); font-size:21px; font-weight:700; }
+    .eyebrow { color:var(--deep); font-size:30px; font-weight:800; letter-spacing:-.04em; }
     h1 { margin:0; color:var(--muted); font-size:11px; font-weight:400; }
     .lead { display:none; }
     .contact { margin-left:auto; color:var(--ink); font-size:10px; }
     main { display:contents; }
     .panel { position:relative; }
-    .upload-panel { grid-column:1; grid-row:2; margin:0 9px 0 18px; align-self:stretch; min-height:0; box-sizing:border-box; display:flex; flex-direction:column; padding:22px 20px; border:2px solid var(--ink); border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
+    .upload-panel { grid-column:1; grid-row:2; margin:0 9px 0 18px; align-self:start; min-height:0; box-sizing:border-box; display:flex; flex-direction:column; padding:22px 20px; border:2px solid var(--ink); border-radius:24px; background:var(--orange); color:var(--deep); transform:none; box-shadow:0 8px 24px rgba(0,0,0,.10); animation:pop .45s ease both; z-index:2; }
     .upload-panel:after { content:""; position:absolute; width:13px; height:13px; right:17px; top:16px; border-radius:50%; background:#fff; box-shadow:-20px 5px 0 var(--ink); }
     .upload-panel h2 { margin:0 0 7px; font-size:18px; }
     .upload-panel>p { margin:0; color:var(--ink); font-size:11px; line-height:1.7; }
-    .upload { margin-top:24px; display:flex; flex:1; min-height:205px; flex-direction:column; align-items:flex-start; }
+    .upload { margin-top:24px; display:flex; flex:none; min-height:0; flex-direction:column; align-items:flex-start; }
     .upload label,.demo-button { min-height:39px; padding:9px 13px; border-radius:999px; cursor:pointer; font-size:11px; font-weight:600; transition:.18s ease; }
     .upload label { display:inline-flex; align-items:center; color:#fff; background:var(--ink); border:1px solid var(--ink); }
     .upload label:before { content:"＋"; margin-right:5px; font-size:15px; }
@@ -35,6 +35,9 @@
     .demo-button:hover { background:#fff; }
     .upload input { display:none; }
     .upload-status { margin-top:auto; color:var(--ink); font-size:10px; line-height:1.6; }
+    .upload-guide { display:grid; gap:6px; margin-top:18px; padding-top:14px; border-top:1px solid rgba(17,17,17,.25); font-size:10px; line-height:1.5; }
+    .upload-guide strong { font-size:12px; }
+    .upload-guide span:before { content:'→'; margin-right:6px; font-weight:700; }
     .province-filter { width:100%; margin-top:10px; padding:10px 12px; color:var(--deep); background:#fff; border:1px solid var(--ink); border-radius:12px; outline:none; font-size:11px; }
     .scope-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; margin-top:10px; }
     .scope-controls input { display:block; min-width:0; width:100%; padding:9px 10px; color:var(--deep); background:#fff; border:1px solid var(--ink); border-radius:10px; font-size:10px; }
@@ -52,28 +55,28 @@
     .rule strong { display:block; margin-bottom:3px; color:var(--deep); font-size:11px; }
     .rule span { color:var(--muted); font-size:9px; line-height:1.55; }
     .notice { margin-top:22px; padding:0; color:var(--muted); background:transparent; border-radius:0; font-size:9px; line-height:1.7; }
-    .chat { grid-column:1/3; grid-row:3; min-width:0; min-height:700px; height:760px; margin:0 18px 18px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:26px; background:#fff; box-shadow:0 14px 40px rgba(0,0,0,.08); animation:rise .48s ease both; }
-    .panel-title { min-height:82px; padding:17px 25px; display:flex; align-items:center; justify-content:space-between; gap:18px; background:#fff; border-bottom:2px solid var(--ink); }
-    .panel-title h2 { margin:0; color:var(--deep); font-size:25px; font-weight:600; }
-    .panel-title span[style] { margin-left:0!important; color:var(--muted)!important; }
+    .chat { grid-column:1/3; grid-row:3; min-width:0; min-height:700px; height:760px; margin:0 18px 18px; display:flex; flex-direction:column; overflow:hidden; border:2px solid var(--ink); border-radius:26px; background:#fff; box-shadow:8px 8px 0 var(--ink),0 14px 40px rgba(0,0,0,.08); animation:rise .48s ease both; }
+    .panel-title { min-height:62px; padding:9px 25px; display:flex; align-items:center; justify-content:space-between; gap:18px; background:#fff; border-bottom:2px solid var(--ink); }
+    .panel-title h2 { display:inline-block; margin:0; color:var(--deep); font-size:22px; font-weight:600; }
+    .panel-title span[style] { display:inline-block!important; margin:0 0 0 18px!important; color:var(--muted)!important; font-size:14px!important; vertical-align:middle; }
     .status { padding:7px 11px; color:var(--ink); background:var(--orange-soft); border:1px solid var(--orange); border-radius:999px; font-size:10px; white-space:nowrap; }
-    .messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:18px; padding:28px clamp(22px,4vw,58px); scroll-behavior:smooth; background-color:#fff; background-image:radial-gradient(#dedede 1px,transparent 1px); background-size:22px 22px; }
+    .messages { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding:22px clamp(22px,4vw,58px); scroll-behavior:smooth; background-color:#fff; background-image:radial-gradient(#dedede 1px,transparent 1px); background-size:22px 22px; }
     .messages::-webkit-scrollbar { width:6px; }
     .messages::-webkit-scrollbar-thumb { background:#c7cad5; border-radius:10px; }
-    .msg { max-width:80%; padding:16px 18px; border-radius:18px; font-size:14px; line-height:1.85; white-space:pre-line; position:relative; }
-    .answer-wrap { width:min(900px,86%); max-width:86%; align-self:flex-start; }
+    .msg { max-width:80%; padding:13px 16px; border-radius:18px; font-size:13px; line-height:1.65; white-space:pre-line; position:relative; -webkit-user-select:text; user-select:text; cursor:text; }
+    .answer-wrap { width:min(900px,86%); max-width:86%; align-self:flex-start; -webkit-user-select:text; user-select:text; }
     .answer-wrap .msg { max-width:100%; }
     .assistant { align-self:flex-start; color:var(--deep); background:#fff; border:1px solid var(--ink); box-shadow:6px 6px 0 var(--ink); }
     .assistant:before { content:"分析助手"; display:inline-block; margin-bottom:8px; padding:3px 8px; color:#fff; background:var(--orange); border-radius:999px; font-size:9px; font-weight:700; }
     .user { align-self:flex-end; color:#fff; background:var(--ink); border-radius:18px 18px 5px 18px; transform:rotate(-.25deg); }
     .source { margin-top:10px; padding-top:9px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
-    .quick { display:flex; gap:8px; padding:12px 20px; overflow-x:auto; border-top:2px solid var(--ink); background:#fff; scrollbar-width:none; }
+    .quick { display:flex; gap:7px; padding:9px 20px; overflow-x:auto; border-top:2px solid var(--ink); background:#fff; scrollbar-width:none; }
     .quick:before { content:"试试这样问"; flex:0 0 auto; align-self:center; margin-right:3px; color:var(--muted); font-size:10px; }
     .quick button { flex:0 0 auto; min-height:34px; padding:7px 11px; color:var(--deep); border:0; border-radius:999px; cursor:pointer; font-size:10px; transition:.16s ease; }
     .quick button:nth-of-type(odd) { background:var(--orange-soft); border:1px solid var(--orange); }
     .quick button:nth-of-type(even) { background:#fff; border:1px solid var(--ink); }
     .quick button:hover { transform:translateY(-2px) rotate(-1deg); box-shadow:0 4px 0 var(--ink); }
-    .composer { display:flex; gap:8px; flex-shrink:0; margin:0; padding:13px 20px 18px; background:#fff; border-top:2px solid var(--ink); }
+    .composer { display:flex; gap:8px; flex-shrink:0; margin:0; padding:10px 20px 14px; background:#fff; border-top:2px solid var(--ink); }
     input { min-width:0; flex:1; padding:13px 15px; color:var(--deep); background:#f7f8fa; border:1px solid var(--line); border-radius:12px; outline:none; }
     input:focus { background:#fff; border:2px solid var(--orange); padding:12px 14px; }
     .send { min-width:90px; padding:0 19px; color:#fff; background:var(--ink); border:0; border-radius:999px; font-weight:600; cursor:pointer; transition:.18s ease; }
@@ -96,6 +99,13 @@
     .push-actions button:last-child { color:#fff; background:var(--ink); }
     .publish-answer[data-feishu-publish],.publish-answer[data-jingme-publish] { font-size:0; }
     .publish-answer[data-feishu-publish]:after,.publish-answer[data-jingme-publish]:after { content:"推送"; font-size:10px; }
+    .filter-panel { grid-column:1/3; grid-row:3; align-self:start; margin:0 18px; padding:20px 25px; border:1px solid var(--ink); border-radius:22px; background:var(--orange); box-shadow:6px 6px 0 var(--ink); animation:rise .38s ease both; }
+    .filter-panel[hidden], .chat[hidden] { display:none !important; }
+    .filter-panel h2 { margin:0 0 5px; font-size:20px; }
+    .filter-panel p { margin:0 0 14px; color:var(--muted); font-size:11px; }
+    .filter-panel .province-filter { margin-top:0; }
+    .filter-panel .scope-controls { margin-top:10px; }
+    .chat { grid-row:4; height:calc(100vh - 78px); min-height:640px; margin-top:10px; scroll-margin-top:24px; }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
     @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
     @media (max-width:900px) { .app-shell { display:block; min-height:0; } .workspace-rail { display:block; } .top { min-height:72px; padding:14px 20px; } .contact { display:none; } .upload-panel { margin:16px; min-height:390px; } .side { margin:16px; } .chat { height:760px; min-height:760px; margin:16px 10px 10px; } }
@@ -112,9 +122,9 @@
       <div class="contact">网页问题、数据问题、bug 请联系 mengjiaxi.1</div>
     </header>
     <section class="panel upload-panel">
-  <h2>上传文件</h2>
-  <p>文件仅在当前浏览器中读取，不会上传。</p>
-      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><select id="province-filter" class="province-filter" hidden><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls" hidden><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">筛选</button></div></div>
+  <h2>第一步｜上传文件</h2>
+  <p>先上传 CRM Excel，小助手只在当前浏览器中读取，不会上传原始文件。</p>
+      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div><div class="upload-guide"><strong>准备好后继续</strong><span>支持 .xlsx、.xls、.csv 文件</span><span>下一步会设置省区和日期范围</span></div></div>
     </section>
     <aside class="panel side">
       <h2>上传后，你可以这样问</h2>
@@ -125,9 +135,15 @@
       <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
     </aside>
   </aside>
+    <section class="panel filter-panel" id="filter-panel" hidden>
+      <h2>第二步｜设置分析范围</h2>
+      <p>文件读取完成后，在这里选择省区和日期，再开始问答。</p>
+      <select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select>
+      <div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">应用筛选，开始问答</button></div>
+    </section>
   <main>
     <div class="push-modal" id="push-modal" hidden><div class="push-card" role="dialog" aria-modal="true" aria-labelledby="push-title"><h3 id="push-title">推送</h3><label for="jingme-target-type">推送到</label><select id="jingme-target-type"><option value="group">京ME群</option><option value="erp">ERP</option></select><div id="group-picker"><label for="jingme-group">选择京ME群</label><select id="jingme-group"><option value="">请选择京ME群</option><option value="10204738891">003</option><option value="10205751757">签约为王</option></select><label for="jingme-member">群成员（可选）</label><select id="jingme-member"><option value="">整个群</option></select></div><div id="erp-picker" hidden><label for="jingme-contact">选择常用 ERP</label><select id="jingme-contact"><option value="">请选择联系人</option><option value="xieshihua.3">上海区｜xieshihua.3</option><option value="guanbinbin1">浙江省区｜guanbinbin1</option><option value="tanghaijun8">川藏地区｜tanghaijun8</option><option value="chenzhenzhen35">贵州省区｜chenzhenzhen35</option><option value="zhouxiaoning1">河北省区｜zhouxiaoning1</option><option value="wudong89">甘青宁地区｜wudong89</option><option value="liuqilei">安徽省区｜liuqilei</option><option value="wangzijian25">海南省区｜wangzijian25</option><option value="mengjiaxi.1">我自己｜mengjiaxi.1</option></select><label for="jingme-target">或手动输入 ERP</label><input id="jingme-target" placeholder="请输入 ERP"></div><div class="push-actions"><button type="button" id="push-cancel">取消</button><button type="button" id="push-confirm">确认推送</button></div></div></div>
-    <section class="panel chat">
+    <section class="panel chat" id="chat-panel" hidden>
       <div class="panel-title"><div><h2>开始分析</h2><span style="display:block;color:var(--muted);font-size:12px;margin:6px 0 0 23px">Ask Me Anything!</span></div></div>
       <div class="messages" id="messages">
         <div class="msg assistant">你好，我是质量通报助手。上传 CRM Excel 后，你可以直接问省区内的站长问题、问题类型、连续日期和重复客户。</div>
@@ -183,8 +199,8 @@
       return {rows:clean,rawRows:rows,people,allTypes,totalRows:rows.length,ignoredRows:rows.length-clean.length};
     }
     function sampleRows() { const people=[['示例erp01','华东省区',['录入内容重复','拍照不规范'],'上门'],['示例erp02','华东省区',['拍照不规范','重复拜访'],'微信'],['示例erp03','华南省区',['疑似虚假上报异常','重复拜访'],'电话']]; return Array.from({length:36},(_,i)=>{const p=people[i%people.length],day=String(i%9+1).padStart(2,'0');return {'拜访编码':`DEMO-${String(i+1).padStart(3,'0')}`,'客户编码':`DEMO-C-${i%8+1}`,'客户名称':`示例客户${i%8+1}`,'拜访人ERP':p[0],'拜访人主导省区':p[1],'实际拜访方式':p[3],'实际拜访时间':`2026-10-${day} 09:20:00`,'质检问题类型':p[2][i%p[2].length]};}); }
-    function prepareProvinceFilter() { const filter=document.querySelector('#province-filter'),scope=document.querySelector('#scope-controls'),from=document.querySelector('#date-from'),to=document.querySelector('#date-to'); const provinces=[...new Set(app.report.people.map(g=>g.province))]; const dates=app.sourceRows.map(r=>dateOf(r['实际拜访时间'])).filter(Boolean).sort(); filter.innerHTML='<option value="">全部省区（当前文件）</option>'+provinces.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''); filter.hidden=false; scope.hidden=false; if(dates.length){from.min=dates[0];from.max=dates.at(-1);to.min=dates[0];to.max=dates.at(-1);} filter.value='';from.value='';to.value=''; app.activeProvince='';app.dateFrom='';app.dateTo=''; }
-    function applyScope() { if(!app.sourceRows.length)return; const province=document.querySelector('#province-filter').value,from=document.querySelector('#date-from').value,to=document.querySelector('#date-to').value; if(from&&to&&from>to){window.alert('开始日期不能晚于结束日期。');return;} app.activeProvince=province;app.dateFrom=from;app.dateTo=to; app.rows=app.sourceRows.filter(row=>{const d=dateOf(row['实际拜访时间']);return (!province||String(row['拜访人主导省区']||'')===province)&&(!from||d>=from)&&(!to||d<=to);}); app.report=makeReport(app.rows); const label=[province||'全部省区',from||'最早日期',to||'最晚日期']; status.textContent=`已筛选 ${app.report.rows.length.toLocaleString()} 条可分析记录，可开始提问。`; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">筛选成功：省区为${esc(label[0])}，日期为${esc(label[1])}至${esc(label[2])}。后续问答仅基于当前筛选范围。</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); messages.lastElementChild.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+    function prepareProvinceFilter() { const filter=document.querySelector('#province-filter'),panel=document.querySelector('#filter-panel'),from=document.querySelector('#date-from'),to=document.querySelector('#date-to'); const provinces=[...new Set(app.report.people.map(g=>g.province))]; const dates=app.sourceRows.map(r=>dateOf(r['实际拜访时间'])).filter(Boolean).sort(); filter.innerHTML='<option value="">全部省区（当前文件）</option>'+provinces.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''); panel.hidden=false; if(dates.length){from.min=dates[0];from.max=dates.at(-1);to.min=dates[0];to.max=dates.at(-1);} filter.value='';from.value='';to.value=''; app.activeProvince='';app.dateFrom='';app.dateTo=''; }
+    function applyScope() { if(!app.sourceRows.length)return; const province=document.querySelector('#province-filter').value,from=document.querySelector('#date-from').value,to=document.querySelector('#date-to').value; if(from&&to&&from>to){window.alert('开始日期不能晚于结束日期。');return;} app.activeProvince=province;app.dateFrom=from;app.dateTo=to; app.rows=app.sourceRows.filter(row=>{const d=dateOf(row['实际拜访时间']);return (!province||String(row['拜访人主导省区']||'')===province)&&(!from||d>=from)&&(!to||d<=to);}); app.report=makeReport(app.rows); const chat=document.querySelector('#chat-panel'); chat.hidden=false; const label=[province||'全部省区',from||'最早日期',to||'最晚日期']; status.textContent=`已筛选 ${app.report.rows.length.toLocaleString()} 条可分析记录，可开始提问。`; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">筛选成功：省区为${esc(label[0])}，日期为${esc(label[1])}至${esc(label[2])}。后续问答仅基于当前筛选范围。</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); chat.scrollIntoView({behavior:'smooth',block:'start'}); }
     function showLoaded(label) { status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条可分析记录，可开始提问。`; const provinces=[...new Set(app.report.people.map(g=>g.province))]; const blocks=provinces.map(p=>{const people=app.report.people.filter(g=>g.province===p);const counts=new Map();people.forEach(g=>g.records.forEach(row=>String(row['质检问题类型']).split(/[，,]/).map(x=>x.trim()).filter(Boolean).forEach(t=>counts.set(t,(counts.get(t)||0)+1))));const top=Array.from(counts).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([t,n])=>`${t}（${n}条）`).join('、');const stations=people.slice().sort((a,b)=>b.records.length-a.records.length).slice(0,3).map((g,i)=>`${i+1}. ${g.erp}（${g.records.length}条）`).join('；');return `<strong>${esc(p)}</strong><br>重点站长：${esc(stations||'暂无')}<br>主要问题：${esc(top||'暂无')}`;}).join('<br><br>'); const quality=app.report.ignoredRows?`<br><br><span style="color:#9b4d1f">数据提示：原文件 ${app.report.totalRows} 条，${app.report.ignoredRows} 条因缺少拜访时间或质检问题类型未纳入分析。</span>`:''; messages.insertAdjacentHTML('beforeend',`<div class="answer-wrap"><div class="msg assistant">${esc(label)}${quality}<br>当前按省区分析，共 ${app.report.people.length} 位涉及站长、${app.report.allTypes.size} 类问题。<br><br><strong>省区摘要</strong><br>${blocks||'暂无可分析记录'}<br><br>你可以继续问某省区的问题类型、连续日期、多类问题或重复客户。</div><button class="copy-answer" type="button" aria-label="复制回答" title="复制回答" data-copy-answer>⧉</button></div>`); }
     function answerFromData(q) {
       if (!app.report) return null;
