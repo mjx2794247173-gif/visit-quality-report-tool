@@ -803,7 +803,7 @@ async def clear_pending_workflow_async(session_id: str) -> None:
 
 async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
     messages = [
-        {"role":"system","content":"你是拜访质量助手的通用语义解释器，不回答问题、不计算数字。理解用户完整意图、上下文引用、筛选条件、分组、指标、排序、Top N和表达要求，调用 submit_intent。CRM数据查询为data；规则字段口径为knowledge；文件完整性为quality；发送发布为publishing；明确要求改写已有上一条答案为refinement；引用不存在的上一条结果或缺少必要条件为clarification；完全无关才为out_of_scope。比较多个省区时填写 filters.provinces，不要只保留一个。常识用于理解业务表达，例如本周、领导汇报、换成浙江，不应因此判为out_of_scope。不得把虚假/违规自动映射成具体问题类型。"},
+        {"role":"system","content":"你是拜访质量助手的通用语义解释器，不回答问题、不计算数字。理解用户完整意图、上下文引用、筛选条件、分组、指标、排序、Top N和表达要求，调用 submit_intent。CRM数据查询为data；规则字段口径为knowledge；文件完整性为quality；发送发布为publishing；明确要求改写已有上一条答案为refinement；引用不存在的上一条结果或缺少必要条件为clarification；完全无关才为out_of_scope。比较多个省区时填写 filters.provinces，不要只保留一个。常识用于理解业务表达，例如本周、领导汇报、换成浙江，不应因此判为out_of_scope。‘今天几号、明天几号、当前日期’等日期常识问题属于knowledge，交给回答层结合当前日历信息回答，不需要上一轮CRM分析结果，不得判为clarification。不得把虚假/违规自动映射成具体问题类型。"},
         {"role":"user","content":f"滚动查询摘要：{json.dumps(state.get('working_memory', {}),ensure_ascii=False)}\n最近对话：{json.dumps(state.get('recent', []),ensure_ascii=False)}\n可用数据结构：{json.dumps(state.get('schema_context', {}),ensure_ascii=False)}\n用户问题：{state['question']}"},
     ]
     intent = None
