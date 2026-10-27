@@ -1634,7 +1634,10 @@ async def chat(payload: ChatRequest) -> JSONResponse:
         logger.exception("assistant_call_failed")
         return JSONResponse({"error":"模型调用失败","detail":str(exc),"route":selected["tool"],"tool_result":selected.get("result")}, status_code=502)
     state["last_question"] = payload.question
-    state["history"] = (state.get("history", []) + [{"question": payload.question, "route": tool_name}])[-8:]
+    history_result = summarize_history_result(tool_name, tool_result or {}) if isinstance(tool_result, dict) else {"tool": tool_name}
+    state["history"] = (state.get("history", []) + [{"question": payload.question, "route": tool_name, "result": history_result, "answer": answer}])[-8:]
+    if PERSIST_SESSION_STATE:
+        await save_context_summary_async(payload.session_id, state["history"])
     elapsed = round((time.perf_counter() - started) * 1000)
     validation = (tool_result or {}).get("validation") if isinstance(tool_result, dict) else selected.get("validation")
     logger.info("assistant_call route=%s tool=%s validated=%s sources=%s elapsed_ms=%s", route(payload.question), tool_name, (validation or {}).get("valid"), len(sources), elapsed)
