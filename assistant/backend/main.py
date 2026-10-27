@@ -1442,7 +1442,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
     memory = ""
     if history:
         memory = "\n最近对话仅用于理解省略主语，不得当作统计来源：\n" + json.dumps(history[-6:], ensure_ascii=False)
-    base = [{"role":"system", "content": SYSTEM + "必须先选择一个主工具；数据问题调用确定性分析工具，规则问题调用 knowledge_retrieval。最终只回答用户明确问到的指标和范围，不要主动追加其他省区、站长摘要或无关排名。不得自行计算或改写统计数字。"}, {"role":"user", "content": f"当前本地分析摘要：\n{context}{memory}\n\n用户问题：{question}"}]
+    base = [{"role":"system", "content": SYSTEM + "你是入口 General Agent。先完整理解用户问题、对话上下文和当前分析范围，再自主决定直接回答或调用一个/多个专业工具。只有需要当前 CRM 数字时才调用确定性数据工具；规则和知识问题调用知识检索；文件问题调用质量检查；发布问题只准备发布预览。普通常识、闲聊和不需要工具的问题直接回答，不要强行分类或要求上一轮结果。工具结果是 CRM 事实的唯一来源，不能自行编造、计算或改写数字。最终只回答用户明确问到的内容。"}, {"role":"user", "content": f"当前本地分析摘要：\n{context}{memory}\n\n用户问题：{question}"}]
     async with httpx.AsyncClient(timeout=45) as client:
         # Disable reasoning mode for the planning pass: DeepSeek thinking mode
         # cannot be combined reliably with forced tool selection.
@@ -1454,11 +1454,15 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             # An explicit ERP is an unambiguous lookup. Other questions remain
             # available to the model so it can interpret intent and constraints.
             available_tools = [item for item in TOOL_DEFINITIONS if item["function"]["name"] == "station_lookup"]
-        first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":available_tools,"tool_choice":"required","thinking":{"type":"disabled"},"stream":False,"max_tokens":600})
+        first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":available_tools,"tool_choice":"auto","thinking":{"type":"disabled"},"stream":False,"max_tokens":800})
         if first.status_code >= 400: raise RuntimeError(first.json().get("error",{}).get("message","DeepSeek 工具选择失败"))
         message = first.json()["choices"][0]["message"]
         calls = message.get("tool_calls") or []
-        if not calls: raise RuntimeError("模型未返回工具调用，已拒绝使用未经验证的数字")
+        if not calls:
+            direct = clean_generated_answer(message.get("content") or "")
+            if not direct:
+                raise RuntimeError("General Agent 未返回回答或工具调用")
+            return direct, "direct_answer", {"tool":"direct_answer","validation":{"valid":True}}, []
         ordered_calls = sorted(calls, key=lambda item: 0 if item.get("function",{}).get("name") == preferred else 1)
         results = []
         tool_messages = []
