@@ -1438,7 +1438,6 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         selected = choose_tool(question, context)
         return "后端尚未配置 DEEPSEEK_API_KEY。你仍可以使用页面内的确定性分析功能。", selected["tool"], selected.get("result"), []
     headers = {"Authorization": f"Bearer {API_KEY}"}
-    preferred = choose_tool(question, context).get("tool")
     memory = ""
     if history:
         memory = "\n最近对话仅用于理解省略主语，不得当作统计来源：\n" + json.dumps(history[-6:], ensure_ascii=False)
@@ -1450,10 +1449,6 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
         # available tools for this one case so the model cannot mistake it for
         # a generic station ranking request.
         available_tools = TOOL_DEFINITIONS + [KNOWLEDGE_TOOL]
-        if preferred == "station_lookup":
-            # An explicit ERP is an unambiguous lookup. Other questions remain
-            # available to the model so it can interpret intent and constraints.
-            available_tools = [item for item in TOOL_DEFINITIONS if item["function"]["name"] == "station_lookup"]
         first = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json={"model":MODEL,"messages":base,"tools":available_tools,"tool_choice":"auto","thinking":{"type":"disabled"},"stream":False,"max_tokens":800})
         if first.status_code >= 400: raise RuntimeError(first.json().get("error",{}).get("message","DeepSeek 工具选择失败"))
         message = first.json()["choices"][0]["message"]
@@ -1463,7 +1458,7 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             if not direct:
                 raise RuntimeError("General Agent 未返回回答或工具调用")
             return direct, "direct_answer", {"tool":"direct_answer","validation":{"valid":True}}, []
-        ordered_calls = sorted(calls, key=lambda item: 0 if item.get("function",{}).get("name") == preferred else 1)
+        ordered_calls = calls
         results = []
         tool_messages = []
         for index, call in enumerate(ordered_calls):
@@ -1474,10 +1469,6 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             # intent guard. A station-ranking question must not be answered
             # with an issue-type ranking just because words like “虚假” or
             # “违规” resemble a CRM issue label.
-            if preferred == "station_summary" and name == "problem_type_ranking":
-                name = "station_summary"
-                arguments = {}
-                call.setdefault("function", {})["name"] = name
             # The ERP was supplied by the user, so preserve that explicit
             # condition instead of accepting a model-invented account.
             if name == "station_lookup" and extract_erp(question):
