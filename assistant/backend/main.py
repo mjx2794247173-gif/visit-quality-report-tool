@@ -829,6 +829,13 @@ async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
         if not has_previous_answer:
             intent.missing_information = ["当前会话没有可发布的上一条已校验答案"]
     question = state["question"].strip()
+    # clarification is reserved for genuine references to missing conversation state.
+    # A standalone, meaningful question must be routed to a specialist instead of
+    # producing the generic "上一轮结果不存在" response.
+    has_context_reference = bool(re.search(r"上一轮|上一次|上一条|刚才|前面|上面|这个结果|该结果|它的|继续(?:问|分析|看)|改写|润色|换个说法", question))
+    if intent.domain == "clarification" and not has_context_reference and len(question) >= 2 and not publish_request:
+        intent.domain = "knowledge" if not re.search(r"站长|问题类型|拜访|客户|省区|CRM|质检|次数|多少|排名|最多|连续|重复", question, re.I) else "data"
+        intent.missing_information = []
     province_terms = [alias for province in state.get("schema_context", {}).get("provinces", []) for alias in province_aliases(str(province))]
     condition_followup = bool(
         re.search(r"^(?:那|那么|再看|改成|换成|然后看)", question)
