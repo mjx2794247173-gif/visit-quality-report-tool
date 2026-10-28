@@ -275,45 +275,58 @@
     .filter-panel,.step-choice,.bulletin-module { grid-row:auto; }
     @media (max-width:900px) { .home-grid { display:block; } .panel-kicker { margin-bottom:12px; } }
   </style>
+  <style id="from-zero-layout">
+    .app-shell { display:block; max-width:none; }
+    .new-workspace { width:min(1180px,calc(100% - 48px)); margin:0 auto; padding:58px 0 90px; display:grid; grid-template-columns:1.08fr .92fr; gap:18px; }
+    .welcome-block { grid-column:1/-1; padding:18px 0 34px; border-bottom:1px solid #dce4e1; }
+    .section-index,.module-label { color:#91a09a; font-size:9px; font-weight:700; letter-spacing:.18em; }
+    .welcome-block h2 { max-width:700px; margin:15px 0 9px; color:#17212b; font-size:clamp(36px,5vw,66px); line-height:1.02; letter-spacing:-.075em; font-weight:750; }
+    .welcome-block p { margin:0; color:#75817d; font-size:13px; }
+    .import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin:0; border:1px solid #d6e1dd; border-radius:18px; background:#fff; box-shadow:0 14px 38px rgba(27,58,53,.045); }
+    .import-module,.prompt-module { min-height:300px; padding:28px; }
+    .import-module { background:#eaf5f1; }
+    .module-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
+    .module-head h3 { margin:11px 0 0; color:#17212b; font-size:22px; letter-spacing:-.055em; }
+    .module-number { color:#a1ada9; font-size:11px; font-weight:700; }
+    .import-action { display:flex; align-items:center; gap:8px; margin-top:54px; }
+    .import-action label { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; color:#fff; background:#17212b; border-radius:10px; cursor:pointer; font-size:12px; font-weight:700; }
+    .import-action #excel { display:none; }
+    .import-action label:before { display:none; }
+    .import-action .demo-button { margin:0; }
+    .import-note { margin-top:20px; color:#70807a; font-size:10px; }
+    .upload-status { margin-top:14px; color:#17212b; font-size:11px; }
+    .prompt-list { display:grid; gap:8px; margin-top:26px; }
+    .prompt-list .rule { display:flex; justify-content:space-between; align-items:center; width:100%; min-height:52px; margin:0; padding:13px 14px; text-align:left; cursor:pointer; }
+    .prompt-list .rule strong { margin:0; font-size:12px; }
+    .prompt-list .rule span { font-size:10px; }
+    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module,.new-workspace .chat { grid-column:1/-1; }
+    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module { padding:26px 28px; }
+    .new-workspace .chat { height:720px; min-height:620px; }
+    .dialog-layer { display:contents; }
+    @media(max-width:800px) { .new-workspace { display:block; width:calc(100% - 28px); padding-top:28px; } .welcome-block,.import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin-bottom:14px; } .welcome-block h2 { font-size:42px; } .import-action { margin-top:32px; flex-wrap:wrap; } }
+  </style>
 </head>
 <body>
   <div class="app-shell">
     <header class="top">
-      <div class="top-copy"><div class="eyebrow">拜访质量分析助手</div></div>
-      <p class="lead">上传质检数据，用自然语言快速定位重点站长、集中问题和异常趋势。</p>
-      <div class="contact">网页问题、数据问题、bug 请联系 mengjiaxi.1</div>
+      <div class="top-copy"><div class="eyebrow">拜访质量分析助手</div><h1>把 CRM 记录变成可行动的结论</h1></div>
+      <div class="contact">本地运行 · 数据不离开浏览器</div>
     </header>
-    <div class="home-grid">
-    <section class="panel upload-panel">
-  <div class="panel-kicker">YOUR DATA / 01</div><h2>把数据带进来</h2>
-  <p>上传 CRM Excel。文件只在当前浏览器中读取，不会上传原始文件。</p>
-      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div></div>
-    </section>
-    <aside class="panel side">
-      <div class="panel-kicker">EXPLORE / 02</div><h2>从一个问题开始</h2>
-      <p>上传数据后，直接用自然语言探索站长、问题类型、连续日期和重复客户。</p>
-      <div class="rule"><strong>看谁的问题最多</strong><span>例如：华东省区哪位站长拍照不规范最多？</span></div>
-      <div class="rule"><strong>看问题集中在哪里</strong><span>例如：当前省区哪类问题最多？哪些站长涉及多类问题？</span></div>
-      <div class="rule"><strong>看问题是否持续</strong><span>例如：哪些站长连续多天出现问题？哪些客户被重复拜访？</span></div>
-      <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
-    </aside>
-    </div>
-    <section class="panel filter-panel" id="filter-panel" hidden>
-      <div class="panel-kicker">SCOPE / 03</div><h2>先定义你的范围</h2>
-      <p>文件读取完成后，在这里选择省区和日期，再开始问答。</p>
-      <select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select>
-      <div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">应用筛选，开始问答</button></div>
-    </section>
-    <section class="step-choice" id="step-choice" hidden>
-      <div class="panel-kicker">MODE / 04</div><h2>接下来，你想完成什么？</h2>
-      <p>请选择一个工作方向，下面只显示对应工具。之后也可以随时切换。</p>
-      <div class="choice-actions"><button id="choose-bulletin" type="button">我要通报</button><button id="choose-chat" type="button">我要问答</button></div>
-    </section>
+    <main class="new-workspace">
+      <section class="welcome-block"><div class="section-index">01 / START</div><h2>从一份 CRM 文件开始。</h2><p>导入数据，设定范围，然后用自然语言完成分析或生成通报。</p></section>
+      <section class="import-module">
+        <div class="module-head"><div><span class="module-label">DATA SOURCE</span><h3>导入你的数据</h3></div><span class="module-number">01</span></div>
+        <div class="import-action"><label for="excel">＋ 选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"></div>
+        <div class="upload-status" id="upload-status">尚未选择文件</div><div class="import-note">支持 .xlsx、.xls、.csv · 文件仅在当前浏览器中读取</div>
+      </section>
+      <aside class="prompt-module"><div class="module-head"><div><span class="module-label">TRY ASKING</span><h3>你可以这样开始</h3></div><span class="module-number">02</span></div><div class="prompt-list"><button class="rule"><strong>谁的问题最多？</strong><span>按站长查看问题次数排行</span></button><button class="rule"><strong>问题集中在哪里？</strong><span>按省区、类型和站长拆解</span></button><button class="rule"><strong>问题是否持续？</strong><span>查看连续日期和重复客户</span></button></div></aside>
+    <section class="panel filter-panel" id="filter-panel" hidden><div class="module-head"><div><span class="module-label">ANALYSIS SCOPE</span><h3>定义分析范围</h3></div><span class="module-number">03</span></div><p>选择省区和日期，范围会同时用于问答与通报。</p><select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">继续</button></div></section>
+    <section class="step-choice" id="step-choice" hidden><div class="module-head"><div><span class="module-label">CHOOSE MODE</span><h3>你现在要做什么？</h3></div><span class="module-number">04</span></div><div class="choice-actions"><button id="choose-bulletin" type="button">我要通报 <span>→</span></button><button id="choose-chat" type="button">我要问答 <span>→</span></button></div></section>
     <section class="panel bulletin-module" id="bulletin-module" hidden>
-      <div class="bulletin-head"><div><h2>加权通报</h2><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">重新生成通报</button><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div></div>
+      <div class="bulletin-head"><div><h2>加权通报</h2><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">生成通报</button><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div></div>
       <div class="bulletin-results" id="bulletin-results" hidden><div class="bulletin-status" id="bulletin-status"></div><div id="bulletin-table-wrap"></div><div class="bulletin-preview" id="bulletin-preview"></div><div class="bulletin-actions"><button id="copy-bulletin" type="button">复制通报</button><button id="send-current-bulletin" type="button" disabled>发送至当前省区</button><button id="send-all-bulletins" type="button">一键发送所有省区通报</button></div></div>
     </section>
-  <main>
+  <div class="dialog-layer">
     <div class="push-modal" id="push-modal" hidden><div class="push-card" role="dialog" aria-modal="true" aria-labelledby="push-title"><h3 id="push-title">推送</h3><label for="feishu-target">选择联系人（演示）</label><select id="feishu-target"><option value="">请选择联系人</option><option>上海区｜xieshihua.3</option><option>浙江省区｜guanbinbin1</option><option>川藏地区｜tanghaijun8</option><option>贵州省区｜chenzhenzhen35</option><option>河北省区｜zhouxiaoning1</option><option>甘青宁地区｜wudong89</option><option>安徽省区｜liuqilei</option><option>海南省区｜wangzijian25</option><option>我自己｜mengjiaxi.1</option></select><div class="push-actions"><button type="button" id="push-cancel">取消</button><button type="button" id="push-confirm">确认推送</button></div></div></div>
     <div class="push-modal" id="batch-modal" hidden><div class="batch-card" role="dialog" aria-modal="true" aria-labelledby="batch-title"><h3 id="batch-title">批量通报发送预览</h3><p>你可以直接编辑下面的内容。保留“【发送至：省区】”标记，系统会按标记发送给对应省区。</p><textarea id="batch-content" aria-label="批量通报内容"></textarea><div class="push-actions"><button type="button" id="batch-cancel">取消发送</button><button type="button" id="batch-confirm">确认发送</button></div></div></div>
     <section class="panel chat" id="chat-panel" hidden>
@@ -332,6 +345,7 @@
       </div>
       <form class="composer" id="composer"><input id="question" placeholder="例如：哪些站长连续多天出现问题？" autocomplete="off"><button class="send">发送</button></form>
     </section>
+    </div>
   </main>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
