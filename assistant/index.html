@@ -304,6 +304,28 @@
     .new-workspace .chat { height:720px; min-height:620px; }
     .dialog-layer { display:contents; }
     @media(max-width:800px) { .new-workspace { display:block; width:calc(100% - 28px); padding-top:28px; } .welcome-block,.import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin-bottom:14px; } .welcome-block h2 { font-size:42px; } .import-action { margin-top:32px; flex-wrap:wrap; } }
+    .new-workspace { grid-template-columns:1fr; gap:14px; }
+    .welcome-block { padding-bottom:28px; }
+    .welcome-block h2 { max-width:900px; }
+    .import-module,.prompt-module { min-height:0; }
+    .import-module { min-height:285px; padding:34px 38px; }
+    .import-action { margin-top:44px; }
+    .prompt-module { padding:26px 38px; }
+    .capability-list { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:25px; border-top:1px solid #dce5e1; }
+    .capability-list>div { display:grid; gap:7px; padding:18px 22px 7px 0; }
+    .capability-list>div+div { padding-left:22px; border-left:1px solid #dce5e1; }
+    .capability-list b { color:#17212b; font-size:13px; }
+    .capability-list span { color:#7a8782; font-size:11px; line-height:1.6; }
+    .prompt-list { display:none; }
+    .new-workspace .filter-panel,.new-workspace .step-choice { margin-top:18px; }
+    .new-workspace .step-choice { background:#17212b; border-color:#17212b; color:#fff; }
+    .new-workspace .step-choice h3,.new-workspace .step-choice .module-label { color:#fff; }
+    .new-workspace .step-choice .module-number { color:#9db0aa; }
+    .new-workspace .step-choice .choice-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:26px; }
+    .new-workspace .step-choice .choice-actions button { display:flex; justify-content:space-between; align-items:center; min-height:70px; padding:0 20px; color:#17212b; background:#fff; border:1px solid #fff; border-radius:12px; text-align:left; }
+    .new-workspace .step-choice .choice-actions button span { color:#0d766e; font-size:20px; }
+    .new-workspace .step-choice .choice-actions button:hover { background:#dceeea; }
+    @media(max-width:800px) { .capability-list { grid-template-columns:1fr; } .capability-list>div+div { padding-left:0; border-left:0; border-top:1px solid #dce5e1; } .new-workspace .step-choice .choice-actions { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -313,13 +335,13 @@
       <div class="contact">本地运行 · 数据不离开浏览器</div>
     </header>
     <main class="new-workspace">
-      <section class="welcome-block"><div class="section-index">01 / START</div><h2>从一份 CRM 文件开始。</h2><p>导入数据，设定范围，然后用自然语言完成分析或生成通报。</p></section>
+      <section class="welcome-block"><div class="section-index">QUALITY WORKSPACE / 01</div><h2>把一份 CRM 文件，变成下一步。</h2><p>上传数据后，统一选择分析方式。你可以问问题，也可以直接生成省区通报。</p></section>
       <section class="import-module">
         <div class="module-head"><div><span class="module-label">DATA SOURCE</span><h3>导入你的数据</h3></div><span class="module-number">01</span></div>
         <div class="import-action"><label for="excel">＋ 选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"></div>
         <div class="upload-status" id="upload-status">尚未选择文件</div><div class="import-note">支持 .xlsx、.xls、.csv · 文件仅在当前浏览器中读取</div>
       </section>
-      <aside class="prompt-module"><div class="module-head"><div><span class="module-label">TRY ASKING</span><h3>你可以这样开始</h3></div><span class="module-number">02</span></div><div class="prompt-list"><button class="rule"><strong>谁的问题最多？</strong><span>按站长查看问题次数排行</span></button><button class="rule"><strong>问题集中在哪里？</strong><span>按省区、类型和站长拆解</span></button><button class="rule"><strong>问题是否持续？</strong><span>查看连续日期和重复客户</span></button></div></aside>
+      <aside class="prompt-module"><div class="module-head"><div><span class="module-label">ONE WORKSPACE / 02</span><h3>一个入口，完成两件事</h3></div><span class="module-number">02</span></div><div class="capability-list"><div><b>问答</b><span>用自然语言查站长、问题类型、日期和客户。</span></div><div><b>通报</b><span>按加权得分找出重点站长，生成可直接发送的内容。</span></div></div></aside>
     <section class="panel filter-panel" id="filter-panel" hidden><div class="module-head"><div><span class="module-label">ANALYSIS SCOPE</span><h3>定义分析范围</h3></div><span class="module-number">03</span></div><p>选择省区和日期，范围会同时用于问答与通报。</p><select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">继续</button></div></section>
     <section class="step-choice" id="step-choice" hidden><div class="module-head"><div><span class="module-label">CHOOSE MODE</span><h3>你现在要做什么？</h3></div><span class="module-number">04</span></div><div class="choice-actions"><button id="choose-bulletin" type="button">我要通报 <span>→</span></button><button id="choose-chat" type="button">我要问答 <span>→</span></button></div></section>
     <section class="panel bulletin-module" id="bulletin-module" hidden>
