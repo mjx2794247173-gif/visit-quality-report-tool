@@ -135,6 +135,27 @@
     .bulletin-actions button { padding:7px 12px; color:var(--deep); background:var(--orange); border:0; border-radius:999px; cursor:pointer; font-size:10px; }
     .bulletin-actions button:disabled { opacity:.45; cursor:not-allowed; }
     .chat { grid-row:5; height:calc(100vh - 78px); min-height:640px; margin-top:22px; scroll-margin-top:24px; }
+    /* Codex-like conversation workspace: quiet canvas, compact messages, clear focus. */
+    .top { background:#fff; border-bottom:1px solid var(--line); }
+    .top:before { width:34px; height:34px; border-radius:10px; background:var(--orange); box-shadow:none; font-size:17px; }
+    .eyebrow { font-size:24px; letter-spacing:-.045em; }
+    .chat { border:1px solid #d8d8d8; border-radius:18px; background:#fff; box-shadow:0 8px 28px rgba(17,17,17,.06); }
+    .panel-title { min-height:70px; padding:14px 24px; border-bottom:1px solid var(--line); }
+    .panel-title h2 { font-size:20px; }
+    .messages { gap:18px; padding:28px clamp(24px,7vw,110px); background:#fff; background-image:none; }
+    .msg { padding:11px 14px; border-radius:14px; font-size:13px; line-height:1.7; }
+    .answer-wrap { width:min(820px,86%); }
+    .assistant { border:1px solid #e3e3e3; box-shadow:none; }
+    .assistant:before { margin:-2px 7px 5px 0; padding:2px 7px; background:var(--orange); color:var(--ink); font-size:9px; }
+    .user { border-radius:14px 14px 4px 14px; transform:none; }
+    .quick { padding:11px 24px; border-top:1px solid var(--line); }
+    .quick button { min-height:31px; padding:6px 10px; border:1px solid #dedede!important; background:#fff!important; }
+    .quick button:nth-of-type(odd) { color:#8b5700; border-color:#f0c94b!important; background:#fffaf0!important; }
+    .quick button:hover { transform:none; box-shadow:none; }
+    .composer { padding:12px 24px 18px; background:#fff; }
+    .composer input { padding:14px 16px; border-radius:14px; background:#f7f7f7; }
+    .send { min-width:78px; border-radius:12px; }
+    .send:hover { transform:none; box-shadow:none; }
     @media (max-width:900px) { .bulletin-controls { grid-template-columns:1fr 1fr; } }
     @keyframes rise { from { opacity:0; transform:translateY(14px) scale(.99); } to { opacity:1; transform:none; } }
     @keyframes pop { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
