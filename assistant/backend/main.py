@@ -1600,7 +1600,10 @@ async def jingme_send(payload: JingMeSendRequest) -> JSONResponse:
     # Weighted bulletins are generated from the uploaded Excel scope and are
     # intentionally independent of the last free-chat answer. They carry
     # their own deterministic analysis_result and still require confirmation.
-    is_weighted_bulletin = payload.analysis_result.get("tool") == "weighted_bulletin"
+    is_weighted_bulletin = (
+        payload.analysis_result.get("tool") == "weighted_bulletin"
+        or str(payload.content or "").lstrip().startswith("【发送至：")
+    )
     if payload.content is not None and not is_weighted_bulletin:
         state = sessions.get(payload.session_id) or {}
         history = state.get("history") or []
