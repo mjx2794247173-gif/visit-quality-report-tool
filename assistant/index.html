@@ -141,22 +141,6 @@
     .eyebrow { font-size:24px; letter-spacing:-.045em; }
     .chat { border:1px solid #d8d8d8; border-radius:18px; background:#fff; box-shadow:0 8px 28px rgba(17,17,17,.06); }
     .upload-panel { border-width:1px; align-self:start; height:315px; min-height:0; }
-    .upload-panel { padding:28px 30px; border-radius:24px; background:linear-gradient(145deg,#e6f0ff 0%,#dbeafe 100%); }
-    .upload-panel h2 { font-size:22px; letter-spacing:-.04em; }
-    .upload-panel>p { max-width:520px; font-size:12px; color:#334155; }
-    .upload { margin-top:28px; gap:0; }
-    .upload label { padding:12px 18px; font-size:12px; }
-    .demo-button { margin-top:12px; padding:11px 17px; font-size:12px; }
-    .upload-status { margin-top:12px; color:#334155; font-size:11px; }
-    .side { padding:0 4px; }
-    .side h2 { padding:0; font-size:21px; letter-spacing:-.035em; }
-    .side>p { padding:0; margin-bottom:18px; font-size:11px; color:#64748b; }
-    .rule { min-height:82px; margin-bottom:14px; padding:17px 19px; border:1px solid #d6dce5; border-radius:18px; background:#fff!important; transform:none!important; box-shadow:0 8px 18px rgba(30,41,59,.07); }
-    .rule:nth-of-type(2) { background:#f4f8ff!important; }
-    .rule:hover { transform:translateY(-2px)!important; box-shadow:0 12px 24px rgba(30,41,59,.11); }
-    .rule strong { margin-bottom:6px; font-size:12px; }
-    .rule span { font-size:10px; color:#64748b; }
-    .notice { margin-top:20px; font-size:10px; color:#64748b; }
     .panel-title { min-height:70px; padding:14px 24px; border-bottom:1px solid var(--line); }
     .panel-title h2 { font-size:20px; }
     .messages { gap:18px; padding:28px clamp(24px,7vw,110px); background:#fff; background-image:none; }
@@ -180,223 +164,71 @@
     @media (max-width:620px) { h1 { display:none; } .top { min-height:66px; } .top:before { width:36px; height:36px; } .eyebrow { font-size:18px; } .upload-panel { margin:10px; padding:17px; } .chat { height:calc(100vh - 258px); min-height:550px; border-radius:20px 20px 0 0; } .panel-title { min-height:72px; padding:14px 16px; } .panel-title h2 { font-size:21px; } .status { max-width:145px; white-space:normal; } .messages { padding:22px 15px; } .msg,.answer-wrap { max-width:94%; width:auto; } .quick { padding:10px 12px; } .composer { padding:11px 13px 14px; } .send { min-width:70px; } }
     @media (prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
   </style>
-  <style id="redesign-1028">
-    :root {
-      --ink:#17212b; --deep:#17212b; --muted:#6c7782; --orange:#dceeea;
-      --orange-dark:#0d766e; --orange-soft:#f3f8f7; --line:#d9e1df; --canvas:#f7f8f7;
-      --accent:#efb66a; --mint:#dceeea; --paper:#ffffff;
-    }
-    body { background:var(--canvas); color:var(--ink); font-family:"Noto Sans SC","Microsoft YaHei",sans-serif; }
-    .app-shell { grid-template-rows:82px auto auto auto; row-gap:28px; }
-    .top { min-height:82px; padding:0 42px; background:rgba(247,248,247,.92); border:0; border-bottom:1px solid var(--line); gap:15px; }
-    .top:before { width:38px; height:38px; border-radius:50%; background:var(--mint); color:var(--orange-dark); box-shadow:none; transform:none; font-size:19px; }
-    .top-copy { gap:12px; }
-    .eyebrow { color:var(--ink); font-size:25px; letter-spacing:-.06em; }
-    h1 { color:var(--muted); font-size:12px; letter-spacing:.02em; }
-    .contact { color:var(--muted); font-size:11px; }
-    .upload-panel { margin:0 13px 0 34px; height:360px; padding:37px 38px; border:1px solid #c8d8d5; border-radius:28px; background:linear-gradient(145deg,#eff8f5 0%,#dceeea 100%); box-shadow:0 16px 36px rgba(31,72,67,.08); animation:none; }
-    .upload-panel:after { width:9px; height:9px; right:25px; top:25px; background:var(--accent); box-shadow:-16px 0 0 var(--ink); }
-    .upload-panel h2 { margin:0 0 12px; color:var(--ink); font-size:25px; letter-spacing:-.055em; }
-    .upload-panel>p { max-width:470px; color:#53655f; font-size:12px; line-height:1.8; }
-    .upload { margin-top:35px; }
-    .upload label { min-height:45px; padding:12px 19px; color:#fff; background:var(--ink); border:0; border-radius:13px; font-size:12px; box-shadow:0 5px 0 rgba(23,33,43,.12); }
-    .upload label:hover { transform:translateY(-2px); box-shadow:0 7px 0 rgba(23,33,43,.14); }
-    .demo-button { min-height:42px; margin-top:12px; padding:10px 17px; color:var(--ink); background:#fff; border:1px solid #aebfbb; border-radius:13px; font-size:12px; }
-    .demo-button:hover { background:#fff; border-color:var(--orange-dark); }
-    .upload-status { margin-top:13px; color:#53655f; font-size:11px; }
-    .side { margin:0 34px 0 13px; padding:0 4px; }
-    .side h2 { padding:0; margin:0 0 7px; color:var(--ink); font-size:24px; letter-spacing:-.055em; }
-    .side>p { margin:0 0 22px; padding:0; color:var(--muted); font-size:11px; }
-    .rule { min-height:91px; margin-bottom:14px; padding:20px 21px; border:1px solid #d6e0de; border-radius:18px; background:#fff!important; box-shadow:0 9px 22px rgba(31,72,67,.07); transform:none!important; }
-    .rule:nth-of-type(2) { background:#f0f7ff!important; }
-    .rule:hover { transform:translateY(-3px)!important; box-shadow:0 15px 28px rgba(31,72,67,.1); }
-    .rule strong { margin-bottom:7px; color:var(--ink); font-size:13px; }
-    .rule span { color:#79848a; font-size:10px; }
-    .notice { margin-top:20px; color:#7b8687; font-size:10px; }
-    .filter-panel,.step-choice,.bulletin-module { margin-left:34px; margin-right:34px; border:1px solid #c8d8d5; border-radius:24px; background:var(--mint); box-shadow:0 12px 28px rgba(31,72,67,.06); }
-    .filter-panel { padding:27px 32px; }
-    .step-choice { padding:27px 32px; }
-    .bulletin-module { padding:28px 32px; background:#fff; }
-    .filter-panel h2,.step-choice h2,.bulletin-head h2 { color:var(--ink); letter-spacing:-.045em; }
-    .province-filter,.scope-controls input,.bulletin-controls input,.bulletin-controls select { border:1px solid #b8c9c6; border-radius:12px; }
-    .scope-controls button,.choice-actions button,.bulletin-generate { background:var(--ink); border-radius:13px; }
-    .scope-controls button:hover,.choice-actions button:hover,.bulletin-generate:hover { background:var(--orange-dark); }
-    .bulletin-info { color:var(--ink); background:var(--accent); border-color:var(--ink); }
-    .chat { margin:0 34px 26px; border:1px solid #d6e0de; border-radius:24px; box-shadow:0 14px 34px rgba(31,72,67,.07); }
-    .panel-title { min-height:76px; padding:16px 28px; border-bottom:1px solid var(--line); }
-    .panel-title h2 { color:var(--ink); }
-    .assistant:before { background:var(--accent); color:var(--ink); }
-    .send { background:var(--orange-dark); }
-    .send:hover { background:var(--ink); }
-    @media (max-width:900px) { .upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat { margin-left:16px; margin-right:16px; } }
+  <style id="developer-ai-home">
+    :root{--ink:#e8edf7;--deep:#f4f7ff;--muted:#94a1b8;--orange:#9b8cff;--orange-dark:#b2a5ff;--orange-soft:rgba(123,108,207,.12);--line:rgba(190,202,232,.16);--canvas:#080b13}
+    body{color:var(--ink);background:radial-gradient(circle at 83% 8%,rgba(91,77,183,.18),transparent 30%),radial-gradient(circle at 10% 42%,rgba(49,74,132,.13),transparent 30%),var(--canvas);font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.25;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(to bottom,#000,transparent 75%)}
+    .app-shell{grid-template-rows:76px auto auto auto;gap:0;position:relative;z-index:1}
+    .top{grid-column:1/3;grid-row:1;height:76px;padding:0 6vw;background:rgba(8,11,19,.72);border-bottom:1px solid var(--line);backdrop-filter:blur(18px);gap:14px}
+    .top:before{width:30px;height:30px;border-radius:9px;background:linear-gradient(145deg,#a69bff,#5f6bd7);color:white;box-shadow:0 0 22px rgba(145,130,255,.28);transform:rotate(-5deg);font-size:15px}
+    .top-copy{gap:12px}.eyebrow{color:var(--deep);font-size:16px;letter-spacing:-.04em}.top h1{color:#7e8da8;font-size:10px}.contact{color:#8c9ab4;font-size:10px}
+    .upload-panel{grid-column:1/3;grid-row:2;margin:0;min-height:475px;padding:72px 10vw 48px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;display:block;animation:none}
+    .upload-panel:before{content:"AI WORKSPACE / 01";display:block;position:static;margin-bottom:24px;color:#8291ad;font:700 10px/1 "Segoe UI",sans-serif;letter-spacing:.2em}.upload-panel:after{top:76px;right:6vw;width:7px;height:7px;background:#baabff;box-shadow:-14px 0 0 #7184ff;box-shadow:-14px 0 0 #7184ff,0 0 16px #9e91ff}
+    .upload-panel h2{max-width:740px;margin:0 0 16px;color:#f4f7ff;font-size:clamp(42px,6vw,82px);line-height:.96;letter-spacing:-.08em;font-weight:750}.upload-panel>p{max-width:560px;color:#93a0b8;font-size:13px;line-height:1.8}
+    .upload{margin-top:42px;display:flex;flex-direction:row;align-items:center;gap:9px}.upload label,.demo-button{min-height:45px;padding:12px 18px;border-radius:10px;font-size:12px}.upload label{color:#0b0d15;background:#e9e5ff;border:1px solid #e9e5ff;box-shadow:0 0 22px rgba(159,144,255,.16)}.upload label:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(159,144,255,.2)}.demo-button{margin:0;color:#d9dff0;background:rgba(255,255,255,.04);border:1px solid var(--line)}.demo-button:hover{background:rgba(255,255,255,.08)}.upload-status{margin-top:16px;color:#aab6ca;font-size:11px}.upload input{display:none}
+    .side{grid-column:1/3;grid-row:3;margin:0;padding:52px 6vw 60px;background:rgba(255,255,255,.025);border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid var(--line)}.side h2{margin:0 0 8px;padding:0;color:#f3f6ff;font-size:24px;letter-spacing:-.045em}.side>p{margin:0 0 26px;padding:0;color:#8795ad;font-size:11px}.rule{display:inline-flex;vertical-align:top;flex-direction:column;justify-content:space-between;width:31%;min-height:132px;margin:0 1.4% 0 0;padding:18px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.035)!important;box-shadow:none;transform:none!important}.rule:last-of-type{margin-right:0}.rule:hover{transform:translateY(-4px)!important;border-color:rgba(167,152,255,.55);background:rgba(141,126,235,.09)!important;box-shadow:0 14px 35px rgba(0,0,0,.18)}.rule strong{color:#edf1fc;font-size:13px}.rule span{color:#8290a7;font-size:10px}.notice{margin-top:22px;color:#66758f;font-size:10px}
+    .filter-panel,.step-choice,.bulletin-module{grid-column:1/3;grid-row:auto;margin:28px 6vw 0;padding:25px 28px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.045);box-shadow:none;color:var(--ink)}.filter-panel h2,.step-choice h2,.bulletin-head h2{color:var(--deep)}.filter-panel p,.step-choice p,.bulletin-head p{color:var(--muted)}.province-filter,.scope-controls input,.bulletin-controls input,.bulletin-controls select{color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line)}.scope-controls button,.choice-actions button,.bulletin-generate{background:#e9e5ff;color:#0b0d15;border-radius:10px}.bulletin-module{background:rgba(255,255,255,.045)}.bulletin-preview{background:#0c101b;border:1px solid var(--line);border-radius:12px}.bulletin-actions button{color:#dce3f4;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+    .chat{grid-column:1/3;grid-row:auto;height:calc(100vh - 120px);min-height:640px;margin:52px 6vw 70px;border:1px solid var(--line);border-radius:18px;background:rgba(9,13,23,.8);box-shadow:0 24px 70px rgba(0,0,0,.28);overflow:hidden}.panel-title{background:rgba(255,255,255,.025);border-bottom:1px solid var(--line)}.panel-title h2{color:var(--deep)}.messages{background:transparent;background-image:none}.assistant{color:#dfe6f5;background:rgba(255,255,255,.055);border:1px solid var(--line);box-shadow:none}.assistant:before{color:#0b0d15;background:#b6aaff}.user{color:#fff;background:#5e65aa}.quick{background:rgba(255,255,255,.025);border-top:1px solid var(--line)}.quick button{color:#b5c0d5!important;background:rgba(255,255,255,.04)!important;border:1px solid var(--line)!important}.composer{background:rgba(255,255,255,.025)}.composer input{color:#e9eef9;background:rgba(255,255,255,.06);border:1px solid var(--line)}.composer input::placeholder{color:#77859f}.send{background:#e9e5ff;color:#0b0d15;border-radius:10px}.send:hover{background:#b8adff;box-shadow:0 0 25px rgba(167,152,255,.18)}
+    .push-modal{background:rgba(3,5,10,.75);backdrop-filter:blur(12px)}.push-card,.batch-card{color:var(--ink);background:#111827;border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+    @media(max-width:900px){.upload-panel{margin:0;padding:55px 7vw 42px}.side{margin:0;padding:40px 7vw}.rule{width:100%;margin:0 0 9px}.chat{margin:35px 4vw}.filter-panel,.step-choice,.bulletin-module{margin-left:4vw;margin-right:4vw}}
   </style>
-  <style id="cuelume-inspired-workspace">
-    /* A new composition: quiet editorial shell, one primary action, compact reference rail. */
-    body { background:#f4f6f5; }
-    .app-shell { max-width:1440px; margin:0 auto; grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr); grid-template-rows:74px auto auto auto; gap:0; }
-    .top { grid-column:1/3; min-height:74px; padding:0 56px; background:#f4f6f5; border-bottom:1px solid #dce4e1; }
-    .top:before { width:32px; height:32px; background:#e4f2ee; color:#167b70; font-size:16px; }
-    .eyebrow { font-size:20px; font-weight:750; letter-spacing:-.05em; }
-    h1 { font-size:11px; color:#87938f; }
-    .contact { padding:7px 11px; color:#71817c; border:1px solid #d6e0dc; border-radius:999px; }
-    .upload-panel { grid-column:1; grid-row:2; align-self:stretch; height:420px; margin:34px 18px 34px 56px; padding:34px; border:1px solid #d5e2de; border-radius:22px; background:#fff; box-shadow:0 18px 44px rgba(27,58,53,.06); }
-    .upload-panel:before { content:"01"; position:absolute; top:32px; right:55px; color:#b8c7c3; font:600 11px/1 "Noto Sans SC",sans-serif; letter-spacing:.12em; }
-    .upload-panel:after { top:32px; right:30px; width:8px; height:8px; background:#edb45f; box-shadow:-14px 0 0 #17212b; }
-    .upload-panel h2 { margin:0 0 9px; font-size:23px; }
-    .upload-panel>p { max-width:390px; font-size:11px; color:#77847f; }
-    .upload { margin-top:38px; width:100%; padding:18px; border:1px dashed #b8ccc6; border-radius:16px; background:#f6fbf9; }
-    .upload label { min-height:40px; padding:10px 15px; border-radius:10px; font-size:11px; box-shadow:none; }
-    .upload label:hover { box-shadow:none; }
-    .demo-button { min-height:40px; margin:0 0 0 8px; padding:9px 14px; border-radius:10px; font-size:11px; }
-    .upload-status { margin-top:14px; color:#71817c; font-size:10px; }
-    .side { grid-column:2; grid-row:2; align-self:stretch; margin:34px 56px 34px 18px; padding:7px 0 0; }
-    .side h2 { font-size:22px; }
-    .side>p { max-width:390px; margin-bottom:24px; color:#84908c; font-size:11px; }
-    .rule { min-height:92px; margin-bottom:10px; padding:18px 19px 17px; border:1px solid #d9e3e0; border-radius:15px; background:#fff!important; box-shadow:none; }
-    .rule:nth-of-type(2) { background:#edf7f5!important; border-color:#cfe3de; }
-    .rule:hover { transform:translateX(4px)!important; box-shadow:0 8px 18px rgba(27,58,53,.07); }
-    .rule strong { margin-bottom:6px; font-size:12px; }
-    .rule span { font-size:10px; color:#83908b; }
-    .notice { margin-top:18px; color:#8a9692; }
-    .filter-panel,.step-choice,.bulletin-module { grid-column:1/3; margin-left:56px; margin-right:56px; border:1px solid #d5e2de; border-radius:18px; box-shadow:none; }
-    .filter-panel { padding:23px 26px; background:#eaf5f1; }
-    .filter-panel h2,.step-choice h2 { font-size:18px; }
-    .scope-controls { grid-template-columns:1fr 1fr 1.25fr; gap:8px; }
-    .scope-controls button { grid-column:auto; min-height:40px; border-radius:10px; }
-    .step-choice { padding:23px 26px; background:#fff; }
-    .choice-actions button { min-width:125px; min-height:40px; border-radius:10px; }
-    .bulletin-module { padding:24px 26px; background:#fff; }
-    .chat { grid-column:1/3; grid-row:5; margin:32px 56px 40px; border:1px solid #d5e2de; border-radius:20px; box-shadow:0 18px 44px rgba(27,58,53,.06); }
-    .panel-title { padding:15px 24px; }
-    @media (max-width:900px) { .app-shell { display:block; } .top { padding:0 20px; } .upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat { margin:16px; } .upload-panel { height:auto; min-height:360px; } .scope-controls { grid-template-columns:1fr 1fr; } .scope-controls button { grid-column:1/-1; } }
-    .home-grid { grid-column:1/3; display:grid; grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr); }
-    .panel-kicker { margin-bottom:18px; color:#92a09b; font-size:9px; font-weight:700; letter-spacing:.16em; }
-    .upload-panel .panel-kicker,.side .panel-kicker { display:block; }
-    .filter-panel,.step-choice,.bulletin-module { grid-row:auto; }
-    @media (max-width:900px) { .home-grid { display:block; } .panel-kicker { margin-bottom:12px; } }
-  </style>
-  <style id="from-zero-layout">
-    .app-shell { display:block; max-width:none; }
-    .new-workspace { width:min(1180px,calc(100% - 48px)); margin:0 auto; padding:58px 0 90px; display:grid; grid-template-columns:1.08fr .92fr; gap:18px; }
-    .welcome-block { grid-column:1/-1; padding:18px 0 34px; border-bottom:1px solid #dce4e1; }
-    .section-index,.module-label { color:#91a09a; font-size:9px; font-weight:700; letter-spacing:.18em; }
-    .welcome-block h2 { max-width:700px; margin:15px 0 9px; color:#17212b; font-size:clamp(36px,5vw,66px); line-height:1.02; letter-spacing:-.075em; font-weight:750; }
-    .welcome-block p { margin:0; color:#75817d; font-size:13px; }
-    .import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin:0; border:1px solid #d6e1dd; border-radius:18px; background:#fff; box-shadow:0 14px 38px rgba(27,58,53,.045); }
-    .import-module,.prompt-module { min-height:300px; padding:28px; }
-    .import-module { background:#eaf5f1; }
-    .module-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
-    .module-head h3 { margin:11px 0 0; color:#17212b; font-size:22px; letter-spacing:-.055em; }
-    .module-number { color:#a1ada9; font-size:11px; font-weight:700; }
-    .import-action { display:flex; align-items:center; gap:8px; margin-top:54px; }
-    .import-action label { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; color:#fff; background:#17212b; border-radius:10px; cursor:pointer; font-size:12px; font-weight:700; }
-    .import-action #excel { display:none; }
-    .import-action label:before { display:none; }
-    .import-action .demo-button { margin:0; }
-    .import-note { margin-top:20px; color:#70807a; font-size:10px; }
-    .upload-status { margin-top:14px; color:#17212b; font-size:11px; }
-    .prompt-list { display:grid; gap:8px; margin-top:26px; }
-    .prompt-list .rule { display:flex; justify-content:space-between; align-items:center; width:100%; min-height:52px; margin:0; padding:13px 14px; text-align:left; cursor:pointer; }
-    .prompt-list .rule strong { margin:0; font-size:12px; }
-    .prompt-list .rule span { font-size:10px; }
-    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module,.new-workspace .chat { grid-column:1/-1; }
-    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module { padding:26px 28px; }
-    .new-workspace .chat { height:720px; min-height:620px; }
-    .dialog-layer { display:contents; }
-    @media(max-width:800px) { .new-workspace { display:block; width:calc(100% - 28px); padding-top:28px; } .welcome-block,.import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin-bottom:14px; } .welcome-block h2 { font-size:42px; } .import-action { margin-top:32px; flex-wrap:wrap; } }
-    .new-workspace { grid-template-columns:1fr; gap:14px; }
-    .welcome-block { padding-bottom:28px; }
-    .welcome-block h2 { max-width:900px; }
-    .import-module,.prompt-module { min-height:0; }
-    .import-module { min-height:285px; padding:34px 38px; }
-    .import-action { margin-top:44px; }
-    .prompt-module { padding:26px 38px; }
-    .capability-list { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:25px; border-top:1px solid #dce5e1; }
-    .capability-list>div { display:grid; gap:7px; padding:18px 22px 7px 0; }
-    .capability-list>div+div { padding-left:22px; border-left:1px solid #dce5e1; }
-    .capability-list b { color:#17212b; font-size:13px; }
-    .capability-list span { color:#7a8782; font-size:11px; line-height:1.6; }
-    .prompt-list { display:none; }
-    .new-workspace .filter-panel,.new-workspace .step-choice { margin-top:18px; }
-    .new-workspace .step-choice { background:#17212b; border-color:#17212b; color:#fff; }
-    .new-workspace .step-choice h3,.new-workspace .step-choice .module-label { color:#fff; }
-    .new-workspace .step-choice .module-number { color:#9db0aa; }
-    .new-workspace .step-choice .choice-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:26px; }
-    .new-workspace .step-choice .choice-actions button { display:flex; justify-content:space-between; align-items:center; min-height:70px; padding:0 20px; color:#17212b; background:#fff; border:1px solid #fff; border-radius:12px; text-align:left; }
-    .new-workspace .step-choice .choice-actions button span { color:#0d766e; font-size:20px; }
-    .new-workspace .step-choice .choice-actions button:hover { background:#dceeea; }
-    @media(max-width:800px) { .capability-list { grid-template-columns:1fr; } .capability-list>div+div { padding-left:0; border-left:0; border-top:1px solid #dce5e1; } .new-workspace .step-choice .choice-actions { grid-template-columns:1fr; } }
-  </style>
-  <style id="final-editorial-system">
-    :root { --ink:#152a2d; --teal:#0e6f68; --wash:#e4f1ee; --cream:#fbfcfa; --hair:#d6e3df; --soft:#738580; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--cream); color:var(--ink); font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
-    .app-shell { min-height:100vh; display:block; }
-    .top { height:76px; padding:0 6vw; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--hair); background:var(--cream); }
-    .top:before { content:"质"; width:30px; height:30px; margin-right:11px; border-radius:50%; display:grid; place-items:center; color:var(--teal); background:var(--wash); box-shadow:none; transform:none; font-size:15px; }
-    .top-copy { flex:1; display:flex; align-items:baseline; gap:12px; }
-    .eyebrow { font-size:17px; font-weight:800; letter-spacing:-.06em; }
-    h1 { color:var(--soft); font-size:10px; letter-spacing:.02em; }
-    .contact { margin:0; padding:0; color:#8b9995; background:none; border:0; font-size:10px; }
-    .new-workspace { width:min(1120px,calc(100% - 56px)); margin:0 auto; padding:72px 0 110px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-    .welcome-block { grid-column:1/-1; padding:0 0 46px; border:0; }
-    .section-index,.module-label { color:#91a19b; font-size:9px; font-weight:700; letter-spacing:.22em; }
-    .welcome-block h2 { max-width:850px; margin:17px 0 13px; color:var(--ink); font-size:clamp(38px,5.2vw,70px); line-height:.98; letter-spacing:-.085em; font-weight:800; }
-    .welcome-block p { max-width:530px; margin:0; color:var(--soft); font-size:13px; line-height:1.7; }
-    .import-module,.prompt-module { min-height:350px; padding:32px; border:1px solid var(--hair); border-radius:0; background:#fff; box-shadow:none; }
-    .import-module { background:var(--wash); }
-    .module-head { display:flex; justify-content:space-between; align-items:flex-start; }
-    .module-head h3 { margin:12px 0 0; color:var(--ink); font-size:22px; letter-spacing:-.065em; }
-    .module-number { color:#a2b2ad; font-size:10px; font-weight:700; }
-    .import-action { display:flex; align-items:center; gap:8px; margin-top:88px; }
-    .import-action label { min-height:44px; padding:0 17px; display:inline-flex; align-items:center; color:#fff; background:var(--ink); border-radius:0; cursor:pointer; font-size:12px; font-weight:700; }
-    .import-action .demo-button { margin:0; min-height:44px; color:var(--ink); background:#fff; border:1px solid #b8ccc6; border-radius:0; font-size:11px; }
-    .import-action #excel { display:none; }
-    .upload-status { margin-top:18px; color:var(--ink); font-size:11px; }
-    .import-note { margin-top:12px; color:#738580; font-size:10px; }
-    .capability-list { margin-top:88px; border-top:1px solid var(--hair); display:grid; grid-template-columns:1fr 1fr; }
-    .capability-list>div { display:grid; gap:7px; padding:17px 18px 0 0; }
-    .capability-list>div+div { padding-left:18px; border-left:1px solid var(--hair); }
-    .capability-list b { font-size:13px; }
-    .capability-list span { color:var(--soft); font-size:10px; line-height:1.6; }
-    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module,.new-workspace .chat { grid-column:1/-1; margin:20px 0 0; border:1px solid var(--hair); border-radius:0; box-shadow:none; }
-    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module { padding:30px 32px; }
-    .new-workspace .filter-panel { background:#fff; }
-    .new-workspace .step-choice { background:var(--ink); border-color:var(--ink); color:#fff; }
-    .new-workspace .step-choice .module-label,.new-workspace .step-choice h3 { color:#fff; }
-    .new-workspace .step-choice .choice-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:30px; }
-    .new-workspace .step-choice .choice-actions button { min-height:72px; display:flex; justify-content:space-between; align-items:center; padding:0 20px; color:var(--ink); background:#fff; border:0; border-radius:0; text-align:left; }
-    .new-workspace .step-choice .choice-actions button span { color:var(--teal); font-size:20px; }
-    .new-workspace .chat { height:700px; min-height:600px; }
-    .new-workspace .prompt-list { display:none; }
-    #capability-module[hidden] { display:none; }
-    #capability-module.is-revealed { animation:workspaceReveal .5s ease both; }
-    .dialog-layer { display:contents; }
-    @media(max-width:760px) { .top { padding:0 20px; } .contact { display:none; } .new-workspace { display:block; width:calc(100% - 32px); padding-top:42px; } .welcome-block,.import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin-bottom:14px; } .welcome-block h2 { font-size:43px; } .import-action { margin-top:55px; flex-wrap:wrap; } .capability-list { margin-top:55px; } .new-workspace .step-choice .choice-actions { grid-template-columns:1fr; } }
-    @keyframes workspaceReveal { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+  <style id="developer-motion">
+    .upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat{animation:sectionIn .65s both}
+    .rule{position:relative;overflow:hidden;isolation:isolate}
+    .rule:after{content:"";position:absolute;inset:-1px;z-index:-1;opacity:0;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(174,161,255,.18),transparent 36%);transition:opacity .25s ease}
+    .rule:hover:after{opacity:1}
+    @keyframes sectionIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+    @media(prefers-reduced-motion:reduce){.upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat{animation:none!important}.rule,.rule:after{transition:none!important}}
   </style>
 </head>
 <body>
   <div class="app-shell">
+  <aside class="workspace-rail">
     <header class="top">
-      <div class="top-copy"><div class="eyebrow">拜访质量分析助手</div><h1>把 CRM 记录变成可行动的结论</h1></div>
-      <div class="contact">本地运行 · 数据不离开浏览器</div>
+      <div class="top-copy"><div class="eyebrow">VisitQuality <span style="color:#9b8cff">/ AI Workspace</span></div></div>
+      <p class="lead">上传质检数据，用自然语言快速定位重点站长、集中问题和异常趋势。</p>
+      <div class="contact">LOCAL · PRIVATE · READY</div>
     </header>
-    <main class="new-workspace">
-      <section class="welcome-block"><div class="section-index">QUALITY WORKSPACE / 01</div><h2>把一份 CRM 文件，变成下一步。</h2><p>上传数据后，统一选择分析方式。你可以问问题，也可以直接生成省区通报。</p></section>
-      <section class="import-module">
-        <div class="module-head"><div><span class="module-label">DATA SOURCE</span><h3>导入你的数据</h3></div><span class="module-number">01</span></div>
-        <div class="import-action"><label for="excel">＋ 选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"></div>
-        <div class="upload-status" id="upload-status">尚未选择文件</div><div class="import-note">支持 .xlsx、.xls、.csv · 文件仅在当前浏览器中读取</div>
-      </section>
-      <aside class="prompt-module" id="capability-module" hidden><div class="module-head"><div><span class="module-label">ONE WORKSPACE / 02</span><h3>一个入口，完成两件事</h3></div><span class="module-number">02</span></div><div class="capability-list"><div><b>问答</b><span>用自然语言查站长、问题类型、日期和客户。</span></div><div><b>通报</b><span>按加权得分找出重点站长，生成可直接发送的内容。</span></div></div></aside>
-    <section class="panel filter-panel" id="filter-panel" hidden><div class="module-head"><div><span class="module-label">ANALYSIS SCOPE</span><h3>定义分析范围</h3></div><span class="module-number">03</span></div><p>选择省区和日期，范围会同时用于问答与通报。</p><select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select><div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">继续</button></div></section>
-    <section class="step-choice" id="step-choice" hidden><div class="module-head"><div><span class="module-label">CHOOSE MODE</span><h3>你现在要做什么？</h3></div><span class="module-number">04</span></div><div class="choice-actions"><button id="choose-bulletin" type="button">我要通报 <span>→</span></button><button id="choose-chat" type="button">我要问答 <span>→</span></button></div></section>
+    <section class="panel upload-panel">
+  <h2>把 CRM 信号，变成下一步动作。</h2>
+  <p>导入一份 CRM 文件，让 AI 帮你定位重点站长、解释问题集中在哪里，并生成可执行的通报。</p>
+      <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div></div>
+    </section>
+    <aside class="panel side">
+      <h2>从一个问题开始。</h2>
+      <p>上传后，用自然语言探索站长、问题类型、连续日期和重复客户。</p>
+      <div class="rule"><strong>看谁的问题最多</strong><span>例如：华东省区哪位站长拍照不规范最多？</span></div>
+      <div class="rule"><strong>看问题集中在哪里</strong><span>例如：当前省区哪类问题最多？哪些站长涉及多类问题？</span></div>
+      <div class="rule"><strong>看问题是否持续</strong><span>例如：哪些站长连续多天出现问题？哪些客户被重复拜访？</span></div>
+      <div class="notice">小助手只读取 CRM 已有的“质检问题类型”，不自行判断虚假拜访，也不查看照片或反馈内容。</div>
+    </aside>
+  </aside>
+    <section class="panel filter-panel" id="filter-panel" hidden>
+      <h2>第二步｜设置分析范围</h2>
+      <p>文件读取完成后，在这里选择省区和日期，再开始问答。</p>
+      <select id="province-filter" class="province-filter"><option value="">全部省区（当前文件）</option></select>
+      <div class="scope-controls" id="scope-controls"><input id="date-from" type="date" aria-label="开始日期"><input id="date-to" type="date" aria-label="结束日期"><button id="apply-scope" type="button">应用筛选，开始问答</button></div>
+    </section>
+    <section class="step-choice" id="step-choice" hidden>
+      <h2>第三步｜选择你要做什么</h2>
+      <p>请选择一个工作方向，下面只显示对应工具。之后也可以随时切换。</p>
+      <div class="choice-actions"><button id="choose-bulletin" type="button">我要通报</button><button id="choose-chat" type="button">我要问答</button></div>
+    </section>
     <section class="panel bulletin-module" id="bulletin-module" hidden>
-      <div class="bulletin-head"><div><h2>加权通报</h2><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">生成通报</button><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div></div>
+      <div class="bulletin-head"><div><h2>加权通报</h2><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">重新生成通报</button><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div></div>
       <div class="bulletin-results" id="bulletin-results" hidden><div class="bulletin-status" id="bulletin-status"></div><div id="bulletin-table-wrap"></div><div class="bulletin-preview" id="bulletin-preview"></div><div class="bulletin-actions"><button id="copy-bulletin" type="button">复制通报</button><button id="send-current-bulletin" type="button" disabled>发送至当前省区</button><button id="send-all-bulletins" type="button">一键发送所有省区通报</button></div></div>
     </section>
-  <div class="dialog-layer">
+  <main>
     <div class="push-modal" id="push-modal" hidden><div class="push-card" role="dialog" aria-modal="true" aria-labelledby="push-title"><h3 id="push-title">推送</h3><label for="feishu-target">选择联系人（演示）</label><select id="feishu-target"><option value="">请选择联系人</option><option>上海区｜xieshihua.3</option><option>浙江省区｜guanbinbin1</option><option>川藏地区｜tanghaijun8</option><option>贵州省区｜chenzhenzhen35</option><option>河北省区｜zhouxiaoning1</option><option>甘青宁地区｜wudong89</option><option>安徽省区｜liuqilei</option><option>海南省区｜wangzijian25</option><option>我自己｜mengjiaxi.1</option></select><div class="push-actions"><button type="button" id="push-cancel">取消</button><button type="button" id="push-confirm">确认推送</button></div></div></div>
     <div class="push-modal" id="batch-modal" hidden><div class="batch-card" role="dialog" aria-modal="true" aria-labelledby="batch-title"><h3 id="batch-title">批量通报发送预览</h3><p>你可以直接编辑下面的内容。保留“【发送至：省区】”标记，系统会按标记发送给对应省区。</p><textarea id="batch-content" aria-label="批量通报内容"></textarea><div class="push-actions"><button type="button" id="batch-cancel">取消发送</button><button type="button" id="batch-confirm">确认发送</button></div></div></div>
     <section class="panel chat" id="chat-panel" hidden>
@@ -415,7 +247,6 @@
       </div>
       <form class="composer" id="composer"><input id="question" placeholder="例如：哪些站长连续多天出现问题？" autocomplete="off"><button class="send">发送</button></form>
     </section>
-    </div>
   </main>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -457,8 +288,7 @@
       return {rows:clean,rawRows:rows,people,allTypes,totalRows:rows.length,ignoredRows:rows.length-clean.length};
     }
     function sampleRows() { const people=[['示例erp01','华东省区',['录入内容重复','拍照不规范'],'上门'],['示例erp02','华东省区',['拍照不规范','重复拜访'],'微信'],['示例erp03','华南省区',['疑似虚假上报异常','重复拜访'],'电话']]; return Array.from({length:36},(_,i)=>{const p=people[i%people.length],day=String(i%9+1).padStart(2,'0');return {'拜访编码':`DEMO-${String(i+1).padStart(3,'0')}`,'客户编码':`DEMO-C-${i%8+1}`,'客户名称':`示例客户${i%8+1}`,'拜访人ERP':p[0],'拜访人主导省区':p[1],'实际拜访方式':p[3],'实际拜访时间':`2026-10-${day} 09:20:00`,'质检问题类型':p[2][i%p[2].length]};}); }
-    function revealWorkspace(){const module=document.querySelector('#capability-module');if(module){module.hidden=false;module.classList.add('is-revealed');}document.querySelector('#filter-panel')?.scrollIntoView({behavior:'smooth',block:'start'});}
-    function loadDemoData() { try { resetSessionId(); app.sourceRows=sampleRows(); app.rows=app.sourceRows; app.report=makeReport(app.rows); prepareProvinceFilter(); setupBulletin(); status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条示例记录，请设置筛选条件。`; revealWorkspace(); } catch (error) { status.textContent=`示例数据加载失败：${error.message}`; } }
+    function loadDemoData() { try { resetSessionId(); app.sourceRows=sampleRows(); app.rows=app.sourceRows; app.report=makeReport(app.rows); prepareProvinceFilter(); setupBulletin(); status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条示例记录，请设置筛选条件。`; document.querySelector('#filter-panel')?.scrollIntoView({behavior:'smooth',block:'start'}); } catch (error) { status.textContent=`示例数据加载失败：${error.message}`; } }
     function prepareProvinceFilter() { const filter=document.querySelector('#province-filter'),panel=document.querySelector('#filter-panel'),from=document.querySelector('#date-from'),to=document.querySelector('#date-to'); const provinces=[...new Set(app.report.people.map(g=>g.province))]; const dates=app.sourceRows.map(r=>dateOf(r['实际拜访时间'])).filter(Boolean).sort(); filter.innerHTML='<option value="">全部省区（当前文件）</option>'+provinces.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''); panel.hidden=false; if(dates.length){from.min=dates[0];from.max=dates.at(-1);to.min=dates[0];to.max=dates.at(-1);} filter.value='';from.value='';to.value=''; app.activeProvince='';app.dateFrom='';app.dateTo=''; }
     const bulletinStep=(n,steps)=>steps.find(([max])=>n<=max)?.[1]||steps.at(-1)[1];
     function bulletinCandidates(rows=app.rows){const groups=new Map();rows.forEach((r,i)=>{const types=String(r['质检问题类型']||'').split(/[，,]/).map(x=>x.trim()).filter(x=>x&&x!=='反馈内容无意义');if(!types.length)return;const provinceName=String(r['拜访人主导省区']||'未填写').trim(),erp=String(r['拜访人ERP']||'未填写').trim(),key=`${provinceName}|||${erp}`,g=groups.get(key)||{province:provinceName,erp,records:[],types:new Map(),visits:new Set(),customers:new Set(),dates:new Set(),latest:''};g.records.push(r);g.visits.add(String(r['拜访编码']||r['拜访ID']||`${key}-${i}`));const customer=String(r['客户编码']||r['客户名称']||'').trim();if(customer)g.customers.add(customer);const d=dateOf(r['实际拜访时间']);g.dates.add(d);if(d>g.latest)g.latest=d;types.forEach(t=>g.types.set(t,(g.types.get(t)||0)+1));groups.set(key,g);});return [...groups.values()].map(g=>{const visits=g.visits.size,issues=g.types.size,days=g.dates.size,customers=g.customers.size;const score={visits:bulletinStep(visits,[[2,8],[5,16],[10,26],[20,36],[Infinity,45]]),issues:bulletinStep(issues,[[1,5],[2,12],[3,19],[Infinity,25]]),days:bulletinStep(days,[[1,3],[2,6],[3,9],[5,12],[Infinity,15]]),customers:bulletinStep(customers,[[1,2],[3,5],[6,8],[10,12],[Infinity,15]])};return {...g,visitCodes:[...g.visits],visits,issues,days,customers,score,total:score.visits+score.issues+score.days+score.customers};}).sort((a,b)=>b.total-a.total||b.issues-a.issues||b.visits-a.visits||b.latest.localeCompare(a.latest));}
@@ -517,7 +347,7 @@
     document.querySelector('#composer').addEventListener('submit',e=>{e.preventDefault();const q=input.value;input.value='';askWithModel(q);}); document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>askWithModel(b.dataset.q)));
     let pendingPushButton=null; function openPushModal(button){pendingPushButton=button;document.querySelector('#feishu-target').value='';document.querySelector('#push-modal').hidden=false;} function closePushModal(){document.querySelector('#push-modal').hidden=true;pendingPushButton=null;} async function confirmPush(){if(!pendingPushButton)return;const target=document.querySelector('#feishu-target').value;if(!target){window.alert('请选择联系人。');return;}pendingPushButton.dataset.target=target;const button=pendingPushButton;closePushModal();publishToFeishu(button);} document.querySelector('#push-cancel').addEventListener('click',closePushModal);document.querySelector('#push-confirm').addEventListener('click',confirmPush);document.querySelector('#push-modal').addEventListener('click',e=>{if(e.target.id==='push-modal')closePushModal();});
     messages.addEventListener('click',e=>{if(e.target.matches('[data-copy-answer]')){const content=e.target.closest('.answer-wrap')?.querySelector('.msg')?.textContent||app.lastAnswer;navigator.clipboard?.writeText(content);e.target.textContent='✓';setTimeout(()=>e.target.textContent='⧉',1200);}if(e.target.matches('[data-feishu-publish]'))openPushModal(e.target);});
-    document.querySelector('#excel').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;status.textContent=`正在读取：${f.name}`;try{const rows=await parseWorkbook(f);const required=['拜访编码','拜访人ERP','拜访人主导省区','实际拜访时间','质检问题类型'];const headers=Object.keys(rows[0]||{});const missing=required.filter(x=>!headers.includes(x));if(missing.length)throw new Error(`缺少字段：${missing.join('、')}`);resetSessionId();app.sourceRows=rows;app.rows=rows;app.report=makeReport(rows);prepareProvinceFilter();setupBulletin();status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条可分析记录，请设置筛选条件。`;revealWorkspace();}catch(err){app.report=null;status.textContent=`读取失败：${err.message}`;}});
+    document.querySelector('#excel').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;status.textContent=`正在读取：${f.name}`;try{const rows=await parseWorkbook(f);const required=['拜访编码','拜访人ERP','拜访人主导省区','实际拜访时间','质检问题类型'];const headers=Object.keys(rows[0]||{});const missing=required.filter(x=>!headers.includes(x));if(missing.length)throw new Error(`缺少字段：${missing.join('、')}`);resetSessionId();app.sourceRows=rows;app.rows=rows;app.report=makeReport(rows);prepareProvinceFilter();setupBulletin();status.textContent=`已读取 ${app.report.rows.length.toLocaleString()} 条可分析记录，请设置筛选条件。`;}catch(err){app.report=null;status.textContent=`读取失败：${err.message}`;}});
     document.querySelector('#demo-data').addEventListener('click',loadDemoData);
     document.querySelector('#apply-scope').addEventListener('click',applyScope);
     document.querySelector('#choose-bulletin').addEventListener('click',()=>chooseStep('bulletin'));document.querySelector('#choose-chat').addEventListener('click',()=>chooseStep('chat'));
@@ -560,6 +390,7 @@
     async function askWithPlanner(q){messages.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(q)}</div><div class="answer-wrap" data-model-answer><div class="msg assistant">正在理解问题并选择工具…</div></div>`);const slot=messages.querySelector('[data-model-answer] .msg');try{const p=await fetch(`${API_BASE}/api/plan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,schema_context:schemaContext(),session_id:SESSION_ID})}),pd=await readApiResponse(p,'工具选择失败');slot.textContent=pd.tool==='answer_refinement'?'正在整理上一条回答…':pd.tool==='clarification'?'正在确认缺少的上下文…':pd.tool==='out_of_scope'?'正在确认业务范围…':pd.tool==='spreadsheet_query'?'正在本地计算 Excel…':pd.tool==='knowledge_retrieval'?'正在检索业务资料…':pd.tool==='data_quality_check'?'正在检查上传文件…':'正在准备飞书发布预览…';const result=executePlannedTool(pd.tool,pd.plan||{});const a=await fetch(`${API_BASE}/api/answer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,plan:pd.plan||{},tool_result:result,session_id:SESSION_ID,trace_id:pd.trace_id,workflow_id:pd.workflow_id,plan_signature:pd.plan_signature})}),ad=await readApiResponse(a,'回答生成失败');const prepared=pd.tool==='feishu_publish_preview';if(!prepared)app.lastAnswer=String(ad.answer||'暂未得到回答。').replace(/\*\*/g,'');slot.textContent=String(ad.answer||'暂未得到回答。').replace(/\*\*/g,'');slot.insertAdjacentHTML('afterend',`<div class="answer-actions"><button class="copy-answer" type="button" data-copy-answer>⧉</button><button class="publish-answer" type="button" data-feishu-publish${prepared?' data-publish-prepared="true"':''}>推送飞书</button></div>`);}catch(error){slot.textContent=`分析失败：${error.message}`;}messages.querySelector('[data-model-answer]')?.removeAttribute('data-model-answer');messages.lastElementChild.scrollIntoView({behavior:'smooth',block:'nearest'});}
     const markdownCleanup = new MutationObserver(() => messages.querySelectorAll('.assistant').forEach(node => { if(node.textContent.includes('**')) node.textContent=node.textContent.replace(/\*\*/g,''); }));
     markdownCleanup.observe(messages, {childList:true, subtree:true});
+    document.querySelectorAll('.rule').forEach(card=>card.addEventListener('pointermove',event=>{const rect=card.getBoundingClientRect();card.style.setProperty('--mx',`${((event.clientX-rect.left)/rect.width)*100}%`);card.style.setProperty('--my',`${((event.clientY-rect.top)/rect.height)*100}%`);}));
     loadServiceStatus();
   </script>
 </body>
