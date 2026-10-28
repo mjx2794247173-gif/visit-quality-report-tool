@@ -230,6 +230,46 @@
     .send:hover { background:var(--ink); }
     @media (max-width:900px) { .upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat { margin-left:16px; margin-right:16px; } }
   </style>
+  <style id="cuelume-inspired-workspace">
+    /* A new composition: quiet editorial shell, one primary action, compact reference rail. */
+    body { background:#f4f6f5; }
+    .app-shell { max-width:1440px; margin:0 auto; grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr); grid-template-rows:74px auto auto auto; gap:0; }
+    .top { grid-column:1/3; min-height:74px; padding:0 56px; background:#f4f6f5; border-bottom:1px solid #dce4e1; }
+    .top:before { width:32px; height:32px; background:#e4f2ee; color:#167b70; font-size:16px; }
+    .eyebrow { font-size:20px; font-weight:750; letter-spacing:-.05em; }
+    h1 { font-size:11px; color:#87938f; }
+    .contact { padding:7px 11px; color:#71817c; border:1px solid #d6e0dc; border-radius:999px; }
+    .upload-panel { grid-column:1; grid-row:2; align-self:stretch; height:420px; margin:34px 18px 34px 56px; padding:34px; border:1px solid #d5e2de; border-radius:22px; background:#fff; box-shadow:0 18px 44px rgba(27,58,53,.06); }
+    .upload-panel:before { content:"01"; position:absolute; top:32px; right:55px; color:#b8c7c3; font:600 11px/1 "Noto Sans SC",sans-serif; letter-spacing:.12em; }
+    .upload-panel:after { top:32px; right:30px; width:8px; height:8px; background:#edb45f; box-shadow:-14px 0 0 #17212b; }
+    .upload-panel h2 { margin:0 0 9px; font-size:23px; }
+    .upload-panel>p { max-width:390px; font-size:11px; color:#77847f; }
+    .upload { margin-top:38px; width:100%; padding:18px; border:1px dashed #b8ccc6; border-radius:16px; background:#f6fbf9; }
+    .upload label { min-height:40px; padding:10px 15px; border-radius:10px; font-size:11px; box-shadow:none; }
+    .upload label:hover { box-shadow:none; }
+    .demo-button { min-height:40px; margin:0 0 0 8px; padding:9px 14px; border-radius:10px; font-size:11px; }
+    .upload-status { margin-top:14px; color:#71817c; font-size:10px; }
+    .side { grid-column:2; grid-row:2; align-self:stretch; margin:34px 56px 34px 18px; padding:7px 0 0; }
+    .side h2 { font-size:22px; }
+    .side>p { max-width:390px; margin-bottom:24px; color:#84908c; font-size:11px; }
+    .rule { min-height:92px; margin-bottom:10px; padding:18px 19px 17px; border:1px solid #d9e3e0; border-radius:15px; background:#fff!important; box-shadow:none; }
+    .rule:nth-of-type(2) { background:#edf7f5!important; border-color:#cfe3de; }
+    .rule:hover { transform:translateX(4px)!important; box-shadow:0 8px 18px rgba(27,58,53,.07); }
+    .rule strong { margin-bottom:6px; font-size:12px; }
+    .rule span { font-size:10px; color:#83908b; }
+    .notice { margin-top:18px; color:#8a9692; }
+    .filter-panel,.step-choice,.bulletin-module { grid-column:1/3; margin-left:56px; margin-right:56px; border:1px solid #d5e2de; border-radius:18px; box-shadow:none; }
+    .filter-panel { padding:23px 26px; background:#eaf5f1; }
+    .filter-panel h2,.step-choice h2 { font-size:18px; }
+    .scope-controls { grid-template-columns:1fr 1fr 1.25fr; gap:8px; }
+    .scope-controls button { grid-column:auto; min-height:40px; border-radius:10px; }
+    .step-choice { padding:23px 26px; background:#fff; }
+    .choice-actions button { min-width:125px; min-height:40px; border-radius:10px; }
+    .bulletin-module { padding:24px 26px; background:#fff; }
+    .chat { grid-column:1/3; grid-row:5; margin:32px 56px 40px; border:1px solid #d5e2de; border-radius:20px; box-shadow:0 18px 44px rgba(27,58,53,.06); }
+    .panel-title { padding:15px 24px; }
+    @media (max-width:900px) { .app-shell { display:block; } .top { padding:0 20px; } .upload-panel,.side,.filter-panel,.step-choice,.bulletin-module,.chat { margin:16px; } .upload-panel { height:auto; min-height:360px; } .scope-controls { grid-template-columns:1fr 1fr; } .scope-controls button { grid-column:1/-1; } }
+  </style>
 </head>
 <body>
   <div class="app-shell">
