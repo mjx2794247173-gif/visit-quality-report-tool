@@ -23,6 +23,7 @@ exe = EXE(
     a.datas,
     [],
     name='VisitQualityAssistant',
+    icon='quality_icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
