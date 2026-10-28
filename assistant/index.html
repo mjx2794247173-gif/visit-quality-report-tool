@@ -136,10 +136,11 @@
     .bulletin-actions button:disabled { opacity:.45; cursor:not-allowed; }
     .chat { grid-row:5; height:calc(100vh - 78px); min-height:640px; margin-top:22px; scroll-margin-top:24px; }
     /* Codex-like conversation workspace: quiet canvas, compact messages, clear focus. */
-    .top { background:var(--orange); border-bottom:1px solid var(--line); }
-    .top:before { width:34px; height:34px; border-radius:10px; background:var(--orange); box-shadow:none; font-size:17px; }
+    .top { background:var(--orange); border:1px solid var(--ink); }
+    .top:before { width:34px; height:34px; border-radius:10px; background:#fff; box-shadow:4px 4px 0 var(--ink); font-size:17px; }
     .eyebrow { font-size:24px; letter-spacing:-.045em; }
     .chat { border:1px solid #d8d8d8; border-radius:18px; background:#fff; box-shadow:0 8px 28px rgba(17,17,17,.06); }
+    .upload-panel { border-width:1px; }
     .panel-title { min-height:70px; padding:14px 24px; border-bottom:1px solid var(--line); }
     .panel-title h2 { font-size:20px; }
     .messages { gap:18px; padding:28px clamp(24px,7vw,110px); background:#fff; background-image:none; }
