@@ -327,6 +327,51 @@
     .new-workspace .step-choice .choice-actions button:hover { background:#dceeea; }
     @media(max-width:800px) { .capability-list { grid-template-columns:1fr; } .capability-list>div+div { padding-left:0; border-left:0; border-top:1px solid #dce5e1; } .new-workspace .step-choice .choice-actions { grid-template-columns:1fr; } }
   </style>
+  <style id="final-editorial-system">
+    :root { --ink:#152a2d; --teal:#0e6f68; --wash:#e4f1ee; --cream:#fbfcfa; --hair:#d6e3df; --soft:#738580; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--cream); color:var(--ink); font-family:"Microsoft YaHei","Noto Sans SC",sans-serif; }
+    .app-shell { min-height:100vh; display:block; }
+    .top { height:76px; padding:0 6vw; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--hair); background:var(--cream); }
+    .top:before { content:"质"; width:30px; height:30px; margin-right:11px; border-radius:50%; display:grid; place-items:center; color:var(--teal); background:var(--wash); box-shadow:none; transform:none; font-size:15px; }
+    .top-copy { flex:1; display:flex; align-items:baseline; gap:12px; }
+    .eyebrow { font-size:17px; font-weight:800; letter-spacing:-.06em; }
+    h1 { color:var(--soft); font-size:10px; letter-spacing:.02em; }
+    .contact { margin:0; padding:0; color:#8b9995; background:none; border:0; font-size:10px; }
+    .new-workspace { width:min(1120px,calc(100% - 56px)); margin:0 auto; padding:72px 0 110px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .welcome-block { grid-column:1/-1; padding:0 0 46px; border:0; }
+    .section-index,.module-label { color:#91a19b; font-size:9px; font-weight:700; letter-spacing:.22em; }
+    .welcome-block h2 { max-width:850px; margin:17px 0 13px; color:var(--ink); font-size:clamp(38px,5.2vw,70px); line-height:.98; letter-spacing:-.085em; font-weight:800; }
+    .welcome-block p { max-width:530px; margin:0; color:var(--soft); font-size:13px; line-height:1.7; }
+    .import-module,.prompt-module { min-height:350px; padding:32px; border:1px solid var(--hair); border-radius:0; background:#fff; box-shadow:none; }
+    .import-module { background:var(--wash); }
+    .module-head { display:flex; justify-content:space-between; align-items:flex-start; }
+    .module-head h3 { margin:12px 0 0; color:var(--ink); font-size:22px; letter-spacing:-.065em; }
+    .module-number { color:#a2b2ad; font-size:10px; font-weight:700; }
+    .import-action { display:flex; align-items:center; gap:8px; margin-top:88px; }
+    .import-action label { min-height:44px; padding:0 17px; display:inline-flex; align-items:center; color:#fff; background:var(--ink); border-radius:0; cursor:pointer; font-size:12px; font-weight:700; }
+    .import-action .demo-button { margin:0; min-height:44px; color:var(--ink); background:#fff; border:1px solid #b8ccc6; border-radius:0; font-size:11px; }
+    .import-action #excel { display:none; }
+    .upload-status { margin-top:18px; color:var(--ink); font-size:11px; }
+    .import-note { margin-top:12px; color:#738580; font-size:10px; }
+    .capability-list { margin-top:88px; border-top:1px solid var(--hair); display:grid; grid-template-columns:1fr 1fr; }
+    .capability-list>div { display:grid; gap:7px; padding:17px 18px 0 0; }
+    .capability-list>div+div { padding-left:18px; border-left:1px solid var(--hair); }
+    .capability-list b { font-size:13px; }
+    .capability-list span { color:var(--soft); font-size:10px; line-height:1.6; }
+    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module,.new-workspace .chat { grid-column:1/-1; margin:20px 0 0; border:1px solid var(--hair); border-radius:0; box-shadow:none; }
+    .new-workspace .filter-panel,.new-workspace .step-choice,.new-workspace .bulletin-module { padding:30px 32px; }
+    .new-workspace .filter-panel { background:#fff; }
+    .new-workspace .step-choice { background:var(--ink); border-color:var(--ink); color:#fff; }
+    .new-workspace .step-choice .module-label,.new-workspace .step-choice h3 { color:#fff; }
+    .new-workspace .step-choice .choice-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:30px; }
+    .new-workspace .step-choice .choice-actions button { min-height:72px; display:flex; justify-content:space-between; align-items:center; padding:0 20px; color:var(--ink); background:#fff; border:0; border-radius:0; text-align:left; }
+    .new-workspace .step-choice .choice-actions button span { color:var(--teal); font-size:20px; }
+    .new-workspace .chat { height:700px; min-height:600px; }
+    .new-workspace .prompt-list { display:none; }
+    .dialog-layer { display:contents; }
+    @media(max-width:760px) { .top { padding:0 20px; } .contact { display:none; } .new-workspace { display:block; width:calc(100% - 32px); padding-top:42px; } .welcome-block,.import-module,.prompt-module,.filter-panel,.step-choice,.bulletin-module,.chat { margin-bottom:14px; } .welcome-block h2 { font-size:43px; } .import-action { margin-top:55px; flex-wrap:wrap; } .capability-list { margin-top:55px; } .new-workspace .step-choice .choice-actions { grid-template-columns:1fr; } }
+  </style>
 </head>
 <body>
   <div class="app-shell">
