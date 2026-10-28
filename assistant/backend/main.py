@@ -1597,7 +1597,11 @@ async def jingme_send(payload: JingMeSendRequest) -> JSONResponse:
         return JSONResponse({"error": "发送前必须由用户确认"}, status_code=400)
     if bool(payload.erp) == bool(payload.group_id) and not (payload.group_id is None and os.getenv("JINGME_GROUP_ID", "").strip()):
         return JSONResponse({"error": "京ME目标必须且只能是 ERP 或群"}, status_code=422)
-    if payload.content is not None:
+    # Weighted bulletins are generated from the uploaded Excel scope and are
+    # intentionally independent of the last free-chat answer. They carry
+    # their own deterministic analysis_result and still require confirmation.
+    is_weighted_bulletin = payload.analysis_result.get("tool") == "weighted_bulletin"
+    if payload.content is not None and not is_weighted_bulletin:
         state = sessions.get(payload.session_id) or {}
         history = state.get("history") or []
         latest_answer = str(history[-1].get("answer") or "").strip() if history else ""
