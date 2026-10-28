@@ -8,7 +8,15 @@ import urllib.request
 import webview
 
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if getattr(sys, "frozen", False):
+    exe_root = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "..", ".."))
+    candidates = [
+        exe_root,
+        os.path.join(os.path.expanduser("~"), "Documents", "ChatGPT", "自动化选案例", "github-visit-quality-report-tool"),
+    ]
+    ROOT = next((candidate for candidate in candidates if os.path.isdir(os.path.join(candidate, "assistant"))), exe_root)
+else:
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 URL = "http://127.0.0.1:8788/"
 
 
