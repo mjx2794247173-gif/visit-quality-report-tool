@@ -464,6 +464,7 @@
     const markdownCleanup = new MutationObserver(() => messages.querySelectorAll('.assistant').forEach(node => { if(node.textContent.includes('**')) node.textContent=node.textContent.replace(/\*\*/g,''); }));
     markdownCleanup.observe(messages, {childList:true, subtree:true});
     document.querySelectorAll('.rule').forEach(card=>card.addEventListener('pointermove',event=>{const rect=card.getBoundingClientRect();card.style.setProperty('--mx',`${((event.clientX-rect.left)/rect.width)*100}%`);card.style.setProperty('--my',`${((event.clientY-rect.top)/rect.height)*100}%`);}));
+    const scoringInfo=document.querySelector('#bulletin-info');if(scoringInfo){const freshScoringInfo=scoringInfo.cloneNode(true);scoringInfo.replaceWith(freshScoringInfo);freshScoringInfo.addEventListener('click',()=>window.alert('评分规则（满分100分）：\n\n虚假拜访次数（70分）：1次0分，2次12分，3-5次25分，6-10次42分，11-20次58分，21次及以上70分。\n问题类型（12分）：1类2分，2类5分，3类8分，4类及以上12分。\n活跃天数（9分）：1天2分，2天4分，3天6分，4-5天8分，6天及以上9分。\n客户数（9分）：1个1分，2-3个3分，4-6个5分，7-10个7分，11个及以上9分。\n\n只统计当前第二步筛选后的数据；仅有“反馈内容无意义”的记录不计入。'));}
     loadServiceStatus();
   </script>
 </body>
