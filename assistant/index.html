@@ -265,6 +265,8 @@
     .batch-card h3,.batch-card p,.batch-card label,.batch-card input,.batch-card .push-actions{flex:0 0 auto}
     .batch-card textarea{flex:1 1 auto;min-height:220px;max-height:none;overflow:auto}
     .batch-card .push-actions{margin-top:14px}
+    .batch-send-status{min-height:22px;margin-top:10px;color:#555;font-size:12px;line-height:1.5}
+    .batch-send-status.is-sending{color:#1d5fd1}
   </style>
   <style>
     .side-shell{max-width:760px;padding:14px 16px}
@@ -314,7 +316,7 @@
     </section>
   <main>
     <div class="push-modal" id="push-modal" hidden><div class="push-card" role="dialog" aria-modal="true" aria-labelledby="push-title"><h3 id="push-title">推送</h3><label for="feishu-target">选择联系人（演示）</label><select id="feishu-target"><option value="">请选择联系人</option><option>上海区｜xieshihua.3</option><option>浙江省区｜guanbinbin1</option><option>川藏地区｜tanghaijun8</option><option>贵州省区｜chenzhenzhen35</option><option>河北省区｜zhouxiaoning1</option><option>甘青宁地区｜wudong89</option><option>安徽省区｜liuqilei</option><option>海南省区｜wangzijian25</option><option>我自己｜mengjiaxi.1</option></select><div class="push-actions"><button type="button" id="push-cancel">取消</button><button type="button" id="push-confirm">确认推送</button></div></div></div>
-    <div class="push-modal" id="batch-modal" hidden><div class="batch-card" role="dialog" aria-modal="true" aria-labelledby="batch-title"><h3 id="batch-title">批量通报发送预览</h3><p>先填写统一抬头，系统会自动加到每个省区和全国通报前面；下面内容仍可单独编辑。</p><label for="batch-heading">统一抬头（可选）</label><input id="batch-heading" type="text" placeholder="例如：T-2日需关注站长、上周需关注站长"><textarea id="batch-content" aria-label="批量通报内容"></textarea><div class="push-actions"><button type="button" id="batch-cancel">取消发送</button><button type="button" id="batch-confirm">确认发送</button></div></div></div>
+    <div class="push-modal" id="batch-modal" hidden><div class="batch-card" role="dialog" aria-modal="true" aria-labelledby="batch-title"><h3 id="batch-title">批量通报发送预览</h3><p>先填写统一抬头，系统会自动加到每个省区和全国通报前面；下面内容仍可单独编辑。</p><label for="batch-heading">统一抬头（可选）</label><input id="batch-heading" type="text" placeholder="例如：T-2日需关注站长、上周需关注站长"><textarea id="batch-content" aria-label="批量通报内容"></textarea><div class="batch-send-status" id="batch-send-status" role="status" aria-live="polite"></div><div class="push-actions"><button type="button" id="batch-cancel">取消发送</button><button type="button" id="batch-confirm">确认发送</button></div></div></div>
     <section class="panel chat" id="chat-panel" hidden>
       <div class="panel-title"><div><h2>开始分析</h2><span style="display:block;color:var(--muted);font-size:12px;margin:6px 0 0 23px">Ask Me Anything!</span></div></div>
       <div class="messages" id="messages">
@@ -480,6 +482,7 @@
     const bulletinDateRange=rows=>{const dates=(rows||[]).map(r=>dateOf(r['实际拜访时间'])).filter(Boolean).sort();return {start:dates[0]||'未知日期',end:dates.at(-1)||'未知日期'};};
     bulletinText=(province,candidates)=>{const range=bulletinDateRange(app.rows),start=app.dateFrom||range.start,end=app.dateTo||range.end;return candidates.slice(0,3).map((g,i)=>{const types=[...g.types].map(([t,n])=>`${t}${n}次`).join('、');return `【${province}｜${start}至${end}】案例${['一','二','三'][i]}：${g.province}—${g.erp}\n（${start}至${end}共疑似虚假拜访${g.visits}次，其中${types}）\n涉及拜访编码：${g.visitCodes.join('、')}`;}).join('\n\n');};
     compactBulletinText=(province,candidates)=>{const range=bulletinDateRange(app.rows),start=app.dateFrom||range.start,end=app.dateTo||range.end;return candidates.slice(0,3).map((g,i)=>{const types=[...g.types].map(([t,n])=>`${t}${n}次`).join('、');return `【${province}｜${start}至${end}】案例${['一','二','三'][i]}：${g.province}—${g.erp}（疑似虚假拜访${g.visits}次：${types}）`;}).join('\n');};
+    const batchConfirmButton=document.querySelector('#batch-confirm');if(batchConfirmButton){batchConfirmButton.addEventListener('click',()=>{const status=document.querySelector('#batch-send-status');if(status){status.textContent='正在发送，请稍候…';status.classList.add('is-sending');}batchConfirmButton.textContent='发送中…';});}
     loadServiceStatus();
   </script>
 </body>
