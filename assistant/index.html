@@ -194,6 +194,17 @@
     @keyframes heroIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}@keyframes deckIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}@keyframes stageIn{from{opacity:0;transform:translateY(18px) scale(.992)}to{opacity:1;transform:none}}
     @media(max-width:980px){.workspace-rail{display:block;padding:0 22px}.top{height:68px}.top-nav{display:none}.upload-panel{min-height:auto;padding:72px 0 56px}.side{padding:0 0 52px}.side-shell{padding:18px}.filter-panel,.step-choice,.bulletin-module,.chat{width:calc(100% - 40px)}.chat{height:760px}.upload-status{display:block;width:100%;margin:10px 0 0}}
     @media(max-width:620px){.workspace-rail{padding:0 15px}.top{padding:0}.top:before{width:30px;height:30px}.eyebrow{font-size:13px}.contact{font-size:0}.contact:after{content:"READY";font-size:9px}.upload-panel{padding:58px 0 42px}.upload-panel h2{font-size:46px}.upload-panel>p{font-size:12px}.upload{align-items:stretch;flex-direction:column}.upload label,.demo-button{justify-content:center;width:100%}.hero-tags{margin-top:20px}.side-shell{padding:14px}.rule{grid-template-columns:34px 1fr auto;padding:13px 8px}.rule:before{width:32px;height:32px}.filter-panel,.step-choice,.bulletin-module,.chat{width:calc(100% - 24px);padding:20px;margin-top:20px}.scope-controls{grid-template-columns:1fr}.scope-controls button{grid-column:1}.choice-actions{flex-direction:column}.choice-actions button{width:100%}.bulletin-head{flex-direction:column}.bulletin-actions{flex-wrap:wrap}.chat{padding:0;height:720px}.messages{padding:22px 14px}.msg,.answer-wrap{max-width:96%;width:auto}.quick{padding:9px 12px}.composer{padding:10px 12px 14px}.panel-title{padding:13px 16px}}
+    /* Keep each stage self-contained so its bottom edge remains visible before the next stage. */
+    .filter-panel,.step-choice,.bulletin-module{align-self:start;min-height:0;overflow:visible}
+    .bulletin-head{align-items:center}
+    .bulletin-title-row{display:flex;align-items:center;gap:10px}
+    .bulletin-title-row h2{margin:0!important}
+    .bulletin-info{width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;display:inline-grid;place-items:center;border-radius:50%!important;box-shadow:3px 3px 0 #111!important}
+    .bulletin-head>div:last-child{display:flex;align-items:center}
+    .bulletin-actions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;width:100%;margin-top:22px;padding-top:2px}
+    .bulletin-actions button{width:100%;min-height:50px;padding:12px 16px!important;font-size:13px!important}
+    .chat{height:auto;min-height:680px;max-height:none}
+    @media(max-width:620px){.bulletin-head{align-items:flex-start}.bulletin-actions{grid-template-columns:1fr;gap:10px}.bulletin-actions button{min-height:46px}.chat{min-height:720px}}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
     /* Remove decorative product-marketing labels; keep the workspace content and actions. */
     .upload-panel:before,.hero-tags,.top-nav,.contact,.deck-state,.side-shell:after{display:none!important}
@@ -238,6 +249,9 @@
     @media(max-width:620px){.workspace-rail{width:calc(100% - 22px)}.top:before{width:32px;height:32px}.eyebrow{font-size:13px}.contact{padding:8px;font-size:0}.contact:after{content:"READY";font-size:9px}.upload-panel{padding:52px 0 42px}.upload-panel h2{font-size:43px}.upload-panel:after{display:none}.upload{align-items:stretch;flex-direction:column}.upload label,.demo-button{justify-content:center;width:100%}.hero-tags{margin-top:20px}.side{padding-left:0}.side-shell:after{right:-8px;top:72px;width:48px;height:48px;font-size:28px}.rule{width:calc(100% - 8px);grid-template-columns:34px 1fr auto}.rule:before{width:32px;height:32px}.filter-panel,.step-choice,.bulletin-module,.chat{width:calc(100% - 20px);padding:20px}.scope-controls{grid-template-columns:1fr}.scope-controls button{grid-column:1}.choice-actions{flex-direction:column}.choice-actions button{width:100%}.bulletin-head{flex-direction:column}.bulletin-actions{flex-wrap:wrap}.chat{padding:0;height:720px}.messages{padding:22px 14px}.msg,.answer-wrap{max-width:96%;width:auto}.quick{padding:9px 10px}.composer{padding:10px 12px 14px}.panel-title{padding:13px 16px}}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
   </style>
+  <style>
+    .filter-panel,.step-choice,.bulletin-module{align-self:start;min-height:0;overflow:visible}.bulletin-head{align-items:center}.bulletin-title-row{display:flex;align-items:center;gap:10px}.bulletin-title-row h2{margin:0!important}.bulletin-info{width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;display:inline-grid;place-items:center;border-radius:50%!important;box-shadow:3px 3px 0 #111!important}.bulletin-head>div:last-child{display:flex;align-items:center}.bulletin-actions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;width:100%;margin-top:22px;padding-top:2px}.bulletin-actions button{width:100%;min-height:50px;padding:12px 16px!important;font-size:13px!important}.chat{height:auto;min-height:680px;max-height:none}@media(max-width:620px){.bulletin-head{align-items:flex-start}.bulletin-actions{grid-template-columns:1fr;gap:10px}.bulletin-actions button{min-height:46px}.chat{min-height:720px}}
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -250,7 +264,6 @@
     </header>
     <section class="panel upload-panel">
   <h2>让每一条问题，<br><em>都被看见。</em></h2>
-  <p>上传 CRM 质检文件，用自然语言找到重点站长、集中问题和持续异常；需要时，再把分析结果直接整理成省区通报。</p>
       <div class="hero-tags"><span>DETERMINISTIC STATS</span><span>GENERAL AGENT</span><span>TRACEABLE OUTPUT</span></div>
       <div class="upload"><label for="excel">选择 CRM Excel</label><button class="demo-button" id="demo-data" type="button">使用示例数据</button><input id="excel" type="file" accept=".xlsx,.xls,.csv"><div class="upload-status" id="upload-status">尚未选择文件</div></div>
     </section>
@@ -277,7 +290,7 @@
       <div class="choice-actions"><button id="choose-bulletin" type="button">我要通报</button><button id="choose-chat" type="button">我要问答</button></div>
     </section>
     <section class="panel bulletin-module" id="bulletin-module" hidden>
-      <div class="bulletin-head"><div><h2>加权通报</h2><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">重新生成通报</button><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div></div>
+      <div class="bulletin-head"><div><div class="bulletin-title-row"><h2>加权通报</h2><button class="bulletin-info" id="bulletin-info" type="button" title="查看评分规则">!</button></div><p id="bulletin-scope">第二步应用的分析范围会同时用于问答和通报。</p></div><div><button class="bulletin-generate" id="generate-bulletin" type="button">重新生成通报</button></div></div>
       <div class="bulletin-results" id="bulletin-results" hidden><div class="bulletin-status" id="bulletin-status"></div><div id="bulletin-table-wrap"></div><div class="bulletin-preview" id="bulletin-preview"></div><div class="bulletin-actions"><button id="copy-bulletin" type="button">复制通报</button><button id="send-current-bulletin" type="button" disabled>发送至当前省区</button><button id="send-all-bulletins" type="button">一键发送所有省区通报</button></div></div>
     </section>
   <main>
