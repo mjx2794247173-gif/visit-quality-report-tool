@@ -200,6 +200,11 @@
     .side h2{font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif!important;font-size:21px!important;font-weight:700!important;letter-spacing:-.03em!important}
     .rule strong{font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif!important;font-size:17px!important;font-weight:700!important;letter-spacing:-.02em!important}
     .rule span{font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif!important;font-size:13px!important;font-weight:400!important;color:#666!important}
+    .side .rule{grid-template-columns:40px minmax(0,1fr)!important;grid-template-rows:auto auto 1fr!important;min-height:91px!important}
+    .side .rule:before{grid-column:1!important;grid-row:1 / span 2!important;align-self:center!important}
+    .side .rule strong{grid-column:2!important;grid-row:1!important;align-self:end!important}
+    .side .rule span{grid-column:2!important;grid-row:2!important;align-self:start!important}
+    .side .rule:after{grid-column:1!important;grid-row:3!important;align-self:end!important}
   </style>
   <style id="neo-brutal-redesign">
     :root{--ink:#111;--deep:#111;--muted:#555;--orange:#fff500;--orange-dark:#ff7ac8;--orange-soft:#fffbd1;--line:#111;--canvas:#f4f3ef;--blue:#2878ff;--green:#29c987;--pink:#ff7abf;--yellow:#fff500}
