@@ -131,13 +131,13 @@ py -3.12 -m pytest assistant/backend -q
 
 ```powershell
 # 在仓库根目录运行全部 8 条黄金评测
-py -3.12 -m assistant.backend.run_evaluation
+py -3.12 -m assistant.evaluation.run_evaluation
 
 # 只运行第一条，适合低成本冒烟验证
-py -3.12 -m assistant.backend.run_evaluation --limit 1
+py -3.12 -m assistant.evaluation.run_evaluation --limit 1
 
 # 运行条件继承与“先分析、后发布”的多轮评测
-py -3.12 -m assistant.backend.conversation_eval
+py -3.12 -m assistant.evaluation.conversation_eval
 ```
 
 评测分别报告 Agent 路由、工具选择、查询参数、整体通过率、请求失败率和平均耗时。日志用于还原一次真实请求，评测用于判断系统行为是否符合预期，两者用途不同。

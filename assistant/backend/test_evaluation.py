@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from assistant.backend.evaluation import matches_subset, score_plan_result, summarize_evaluation
+from assistant.evaluation.evaluation import matches_subset, score_plan_result, summarize_evaluation
 
 
-CASES_PATH = Path(__file__).with_name("eval_cases.json")
+CASES_PATH = Path(__file__).parents[1] / "evaluation" / "eval_cases.json"
 
 
 def test_single_turn_eval_cases_cover_safe_standalone_routes():

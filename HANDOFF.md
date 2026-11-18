@@ -59,7 +59,7 @@
 - `assistant/backend/main.py`：FastAPI、LangGraph、Agent、RAG、记忆、日志和接口。
 - `assistant/backend/tools.py`：白名单工具执行与结果校验。
 - `assistant/backend/feishu.py`：飞书 MCP 状态与发送封装。
-- `assistant/backend/eval_cases.json`：黄金评测问题及标准结果。
+- `assistant/evaluation/`：评测目标卡、黄金案例、评测脚本和 RAG K 值评测。
 - `assistant/backend/evaluation.py`：分层评分和聚合指标。
 - `assistant/backend/run_evaluation.py`：真实模型评测命令。
 - `assistant/backend/test_*.py`：自动化测试。
@@ -85,8 +85,8 @@ py -3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 8787
 运行自然语言评测：
 
 ```powershell
-py -3.12 -m assistant.backend.run_evaluation --limit 1
-py -3.12 -m assistant.backend.run_evaluation
+py -3.12 -m assistant.evaluation.run_evaluation --limit 1
+py -3.12 -m assistant.evaluation.run_evaluation
 ```
 
 后端代码变化后，必须结束占用 8787 端口的旧进程、重新启动，并调用 `/api/health` 或新增接口进行运行时验证。刷新网页不等于重启后端。
@@ -119,7 +119,7 @@ Supervisor → 专业 Agent → 查询计划 → 等待浏览器工具结果
 已新增多轮真实评测：
 
 ```powershell
-py -3.12 -m assistant.backend.conversation_eval
+py -3.12 -m assistant.evaluation.conversation_eval
 ```
 
 当前覆盖“广东 → 浙江”“修改日期”的连续追问，必须按完整的“规划 → 工具结果 → 回答 → 下一轮规划”链路执行；当前 3/3 轮通过。

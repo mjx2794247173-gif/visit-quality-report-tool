@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .evaluation import score_plan_result, summarize_evaluation
+from assistant.evaluation.evaluation import score_plan_result, summarize_evaluation
 
 
 CASES_PATH = Path(__file__).with_name("eval_cases.json")
