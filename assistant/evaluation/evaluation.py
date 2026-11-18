@@ -53,6 +53,17 @@ def summarize_evaluation(records: list[dict[str, Any]]) -> dict[str, float | int
         for record in successful
         if isinstance(record.get("elapsed_ms"), (int, float))
     ]
+    severity_counts = {severity: {"total": 0, "passed": 0, "failed": 0} for severity in ("P0", "P1", "P2")}
+    for record in records:
+        severity = record.get("severity")
+        if severity not in severity_counts:
+            continue
+        bucket = severity_counts[severity]
+        bucket["total"] += 1
+        if record.get("request_ok") and isinstance(record.get("score"), dict) and record["score"].get("passed"):
+            bucket["passed"] += 1
+        else:
+            bucket["failed"] += 1
     return {
         "total": total,
         "completed": len(successful),
@@ -64,4 +75,10 @@ def summarize_evaluation(records: list[dict[str, Any]]) -> dict[str, float | int
         ) if scored else 0.0,
         "request_failure_rate": round((total - len(successful)) / total, 4) if total else 0.0,
         "average_elapsed_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
+        "p0_total": severity_counts["P0"]["total"],
+        "p0_failed": severity_counts["P0"]["failed"],
+        "p1_total": severity_counts["P1"]["total"],
+        "p1_failed": severity_counts["P1"]["failed"],
+        "p2_total": severity_counts["P2"]["total"],
+        "p2_failed": severity_counts["P2"]["failed"],
     }

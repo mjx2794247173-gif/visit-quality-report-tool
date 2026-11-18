@@ -9,14 +9,18 @@ CASES_PATH = Path(__file__).parents[1] / "evaluation" / "eval_cases.json"
 
 def test_single_turn_eval_cases_cover_safe_standalone_routes():
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
-    assert len(cases) >= 8
-    assert {case["expected_agent"] for case in cases} == {
+    assert len(cases) == 20
+    assert {case["expected_agent"] for case in cases} >= {
         "data_agent",
         "knowledge_agent",
         "quality_agent",
         "clarification_agent",
     }
     assert len({case["id"] for case in cases}) == len(cases)
+    assert {case["severity"] for case in cases} == {"P0", "P1", "P2"}
+    assert sum(case["severity"] == "P0" for case in cases) >= 4
+    assert sum(case.get("mode") == "multi_turn" for case in cases) == 5
+    assert all("rubric" in case for case in cases if case["type"] == "subjective")
 
 
 def test_matches_subset_supports_nested_plan_fields():
@@ -72,6 +76,12 @@ def test_evaluation_summary_separates_quality_latency_and_request_failures():
         "overall_accuracy": 0.5,
         "request_failure_rate": 0.3333,
         "average_elapsed_ms": 200.0,
+        "p0_total": 0,
+        "p0_failed": 0,
+        "p1_total": 0,
+        "p1_failed": 0,
+        "p2_total": 0,
+        "p2_failed": 0,
     }
 
 
@@ -85,4 +95,10 @@ def test_empty_evaluation_summary_is_safe():
         "overall_accuracy": 0.0,
         "request_failure_rate": 0.0,
         "average_elapsed_ms": 0.0,
+        "p0_total": 0,
+        "p0_failed": 0,
+        "p1_total": 0,
+        "p1_failed": 0,
+        "p2_total": 0,
+        "p2_failed": 0,
     }

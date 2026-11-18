@@ -45,8 +45,12 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0, help="只跑前 N 条；0 表示全部")
     args = parser.parse_args()
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    skipped_multi_turn = [case for case in cases if case.get("mode") == "multi_turn"]
+    cases = [case for case in cases if case.get("mode", "single_turn") == "single_turn"]
     if args.limit > 0:
         cases = cases[:args.limit]
+    if skipped_multi_turn:
+        print(f"SKIP {len(skipped_multi_turn)} multi-turn cases; run assistant.evaluation.conversation_eval separately")
 
     passed = 0
     records = []
@@ -58,6 +62,7 @@ def main() -> int:
         except (HTTPError, URLError, TimeoutError, ValueError) as exc:
             records.append({
                 "case_id": case["id"],
+                "severity": case.get("severity", "P1"),
                 "request_ok": False,
                 "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
             })
@@ -66,6 +71,7 @@ def main() -> int:
         elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
         records.append({
             "case_id": case["id"],
+            "severity": case.get("severity", "P1"),
             "request_ok": True,
             "elapsed_ms": elapsed_ms,
             "score": score,
@@ -89,6 +95,14 @@ def main() -> int:
         f"request_failure={metrics['request_failure_rate']:.1%} "
         f"avg_latency={metrics['average_elapsed_ms']:.1f}ms"
     )
+    print(
+        "SEVERITY "
+        f"P0={metrics['p0_failed']}/{metrics['p0_total']} failed "
+        f"P1={metrics['p1_failed']}/{metrics['p1_total']} failed "
+        f"P2={metrics['p2_failed']}/{metrics['p2_total']} failed"
+    )
+    if metrics["p0_failed"]:
+        print("GATE p0=FAIL (P0 一票否决)")
     return 0 if passed == total else 1
 
 
