@@ -48,6 +48,7 @@ MEMORY_TTL_SECONDS = 7 * 24 * 60 * 60
 PERSIST_SESSION_STATE = os.getenv("PERSIST_SESSION_STATE", "false").lower() in {"1", "true", "yes"}
 RETRIEVAL_CACHE_TTL_SECONDS = 10 * 60
 RETRIEVAL_CACHE_MAX_ENTRIES = 128
+MAX_FINAL_RERANK_SOURCES = 3
 PLAN_CACHE_TTL_SECONDS = 60
 PLAN_CACHE_MAX_ENTRIES = 64
 AUDIT_ALLOWED_FIELDS = {
@@ -197,7 +198,7 @@ class RetrievalRanking(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     ranked_indices: list[int] = Field(min_length=1, max_length=10)
-    relevant_indices: list[int] = Field(max_length=10)
+    relevant_indices: list[int] = Field(max_length=MAX_FINAL_RERANK_SOURCES)
 
 
 class WorkingMemory(BaseModel):
@@ -453,7 +454,7 @@ RETRIEVAL_ASSESSMENT_TOOL = {"type":"function","function":{"name":"submit_retrie
 
 RETRIEVAL_REWRITE_TOOL = {"type":"function","function":{"name":"submit_rewritten_query","description":"根据用户原问题和缺失信息生成一次更适合知识库检索的查询，不回答问题。","parameters":{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":500}},"required":["query"],"additionalProperties":False}}}
 
-RETRIEVAL_RANKING_TOOL = {"type":"function","function":{"name":"submit_source_ranking","description":"按相关性重排全部已有资料编号，并标出与问题直接相关的排序前缀；不新增资料，不回答问题。","parameters":{"type":"object","properties":{"ranked_indices":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"maxItems":10},"relevant_indices":{"type":"array","items":{"type":"integer","minimum":0},"maxItems":10}},"required":["ranked_indices","relevant_indices"],"additionalProperties":False}}}
+RETRIEVAL_RANKING_TOOL = {"type":"function","function":{"name":"submit_source_ranking","description":"按相关性重排全部已有资料编号，并标出最多3段与问题直接相关的排序前缀；不新增资料，不回答问题。","parameters":{"type":"object","properties":{"ranked_indices":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"maxItems":10},"relevant_indices":{"type":"array","items":{"type":"integer","minimum":0},"maxItems":3}},"required":["ranked_indices","relevant_indices"],"additionalProperties":False}}}
 
 SPREADSHEET_QUERY_TOOL = {"type":"function","function":{"name":"spreadsheet_query","description":"对浏览器当前上传的 CRM Excel 执行通用筛选、分组、计数、排序和 Top N 查询。用户问站长、问题类型、省区、日期、客户或次数时使用。比较多个省区时使用 provinces；单省区使用 province。‘虚假/违规’不是具体问题类型。","parameters":{"type":"object","properties":{"filters":{"type":"object","properties":{"province":{"type":["string","null"]},"provinces":{"type":"array","items":{"type":"string"},"maxItems":10},"date_from":{"type":["string","null"]},"date_to":{"type":["string","null"]},"station_erp":{"type":["string","null"]},"issue_type":{"type":["string","null"]}},"additionalProperties":False},"group_by":{"type":"string","enum":["station_erp","issue_type","province","date","customer","none"]},"metric":{"type":"string","enum":["visit_count","distinct_visit_count","distinct_issue_type_count","distinct_date_count","distinct_customer_count"]},"order":{"type":"string","enum":["desc","asc"]},"limit":{"type":"integer","minimum":1,"maximum":50}},"required":["filters","group_by","metric","order","limit"],"additionalProperties":False}}}
 
@@ -552,11 +553,11 @@ def apply_source_ranking(sources: list[dict[str, str]], ranking: RetrievalRankin
 
 
 def filter_ranked_sources(sources: list[dict[str, str]], ranking: RetrievalRanking) -> list[dict[str, str]]:
-    """Keep only the model-declared relevant prefix after validating its provenance."""
+    """Keep at most three model-declared relevant sources after validation."""
     apply_source_ranking(sources, ranking)
     if ranking.relevant_indices != ranking.ranked_indices[:len(ranking.relevant_indices)]:
         raise ValueError("相关资料编号必须是完整排序的连续前缀")
-    return [sources[index] for index in ranking.relevant_indices]
+    return [sources[index] for index in ranking.relevant_indices[:MAX_FINAL_RERANK_SOURCES]]
 
 
 async def rerank_retrieval_sources(question: str, sources: list[dict[str, str]]) -> tuple[list[dict[str, str]], bool, bool]:
@@ -568,7 +569,7 @@ async def rerank_retrieval_sources(question: str, sources: list[dict[str, str]])
         for index, item in enumerate(sources)
     ]
     messages = [
-        {"role":"system","content":"你是知识片段相关性重排与过滤器。ranked_indices 必须包含全部已有编号且每个恰好一次，最相关的排最前；relevant_indices 只能是 ranked_indices 从第一个开始的连续前缀，只保留能直接帮助回答当前问题的片段，允许为空。不得新增资料、改写资料或回答问题。必须调用 submit_source_ranking。"},
+        {"role":"system","content":"你是知识片段相关性重排与过滤器。ranked_indices 必须包含全部已有编号且每个恰好一次，最相关的排最前；relevant_indices 只能是 ranked_indices 从第一个开始的连续前缀，最多保留3段，只保留能直接帮助回答当前问题的片段，允许为空。不得新增资料、改写资料或回答问题。必须调用 submit_source_ranking。"},
         {"role":"user","content":json.dumps({"question":question,"candidates":candidates}, ensure_ascii=False)},
     ]
     try:
