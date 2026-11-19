@@ -30,6 +30,7 @@ from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
+from .harness import check_question_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
@@ -617,7 +618,7 @@ def update_working_memory(existing: dict[str, Any] | None, tool: str, plan: dict
     return memory.model_dump(exclude_none=True)
 
 def summarize_history_result(tool: str, result: dict[str, Any]) -> dict[str, Any]:
-    """Keep conversation state useful without retaining aggregated labels or rows."""
+    """Keep a small, de-identified candidate index for safe ordinal follow-ups."""
     summary = {"tool": tool}
     if isinstance(result.get("rows"), list):
         summary["row_count"] = len(result["rows"])
@@ -625,6 +626,21 @@ def summarize_history_result(tool: str, result: dict[str, Any]) -> dict[str, Any
         summary["source_count"] = len(result["sources"])
     if isinstance(result.get("assessment"), dict):
         summary["sufficient"] = result["assessment"].get("is_sufficient")
+    facets = result.get("facets") if isinstance(result.get("facets"), dict) else {}
+    candidates: list[dict[str, Any]] = []
+    for kind, key in (("station", "stations"), ("issue_type", "issue_types")):
+        values = facets.get(key) if isinstance(facets.get(key), list) else []
+        for rank, item in enumerate(values[:10], start=1):
+            if not isinstance(item, dict) or not item.get("label"):
+                continue
+            candidate = {"rank": rank, "type": kind, "label": str(item.get("label"))}
+            if item.get("province"):
+                candidate["province"] = str(item.get("province"))
+            if item.get("value") is not None:
+                candidate["value"] = int(item.get("value") or 0)
+            candidates.append(candidate)
+    if candidates:
+        summary["candidates"] = candidates
     return summary
 
 def compact_context(history: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
@@ -638,7 +654,14 @@ def compact_context(history: list[dict[str, Any]], limit: int = 6) -> list[dict[
         tools = [item.get("tool") or item.get("route") for item in older]
         compacted.append({"summary": {"older_turns": len(older), "tools": sorted({tool for tool in tools if tool})}})
     for item in history[-recent_count:]:
-        compacted.append({"tool": item.get("tool") or item.get("route"), "plan": item.get("plan", {})})
+        compacted_item = {
+            "tool": item.get("tool") or item.get("route"),
+            "plan": item.get("plan", {}),
+        }
+        result = item.get("result")
+        if isinstance(result, dict) and result.get("candidates"):
+            compacted_item["result"] = {"candidates": result["candidates"]}
+        compacted.append(compacted_item)
     return compacted
 
 
@@ -823,6 +846,14 @@ async def intent_interpreter(state: MultiAgentState) -> MultiAgentState:
 
 async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
     intent = IntentInterpretation.model_validate(state.get("intent") or {})
+    policy = check_question_policy(state["question"])
+    if not policy.allowed:
+        intent.domain = "out_of_scope"
+        intent.operation = "explain"
+        intent.uses_previous_query = False
+        intent.uses_previous_answer = False
+        intent.missing_information = [policy.reason or "当前问题超出系统安全边界"]
+        return {**state, "intent": intent.model_dump(), "policy_decision": policy.reason}
     publish_request = bool(re.search(r"(?:发送|推送|发布|发到).{0,8}飞书|飞书.{0,8}(?:发送|推送|发布)", state["question"]))
     if publish_request:
         has_previous_answer = any(str(item.get("answer") or "").strip() for item in state.get("recent", []))
@@ -830,6 +861,17 @@ async def validate_intent_node(state: MultiAgentState) -> MultiAgentState:
         if not has_previous_answer:
             intent.missing_information = ["当前会话没有可发布的上一条已校验答案"]
     question = state["question"].strip()
+    ordinal_reference = bool(re.search(r"(?:第\s*[一二三四五六七八九十\d]+\s*(?:个|名)|前\s*[一二三四五六七八九十\d]+|它(?:们|的)?|该(?:站长|省区)|这个(?:站长|省区))", question))
+    recent_candidates = []
+    for item in reversed(state.get("recent", [])):
+        result = item.get("result") if isinstance(item, dict) else None
+        if isinstance(result, dict) and isinstance(result.get("candidates"), list):
+            recent_candidates = result["candidates"]
+            break
+    if ordinal_reference and not recent_candidates and not publish_request:
+        intent.domain = "clarification"
+        intent.uses_previous_answer = True
+        intent.missing_information = ["当前会话没有可引用的上一轮候选列表，无法确定指代对象"]
     # clarification is reserved for genuine references to missing conversation state.
     # A standalone, meaningful question must be routed to a specialist instead of
     # producing the generic "上一轮结果不存在" response.
@@ -1190,6 +1232,15 @@ MULTI_AGENT_GRAPH = _multi_agent_builder.compile()
 async def plan_query(payload: PlanRequest) -> JSONResponse:
     started = time.perf_counter()
     trace_id = uuid.uuid4().hex
+    policy = check_question_policy(payload.question)
+    if not policy.allowed:
+        state = sessions.setdefault(payload.session_id, {"history": []})
+        workflow_id = uuid.uuid4().hex
+        plan = {}
+        signature = plan_signature(payload.session_id, workflow_id, payload.question, "out_of_scope", plan, payload.file_fingerprint)
+        state["pending_workflow"] = WorkflowBinding(workflow_id=workflow_id, question=payload.question, tool="out_of_scope", plan=plan, signature=signature, file_fingerprint=payload.file_fingerprint).model_dump()
+        audit({"trace_id":trace_id,"action":"plan","ok":True,"agent":"out_of_scope_agent","tool":"out_of_scope","status":"policy_blocked","elapsed_ms":round((time.perf_counter()-started)*1000)})
+        return JSONResponse({"trace_id":trace_id,"workflow_id":workflow_id,"plan_signature":signature,"agent":"out_of_scope_agent","tool":"out_of_scope","plan":{},"policy_blocked":True,"message":policy.reason})
     if not API_KEY:
         audit({"trace_id":trace_id,"action":"plan","ok":False,"status":"model_not_configured","elapsed_ms":round((time.perf_counter()-started)*1000)})
         return JSONResponse({"error":"后端尚未配置 DEEPSEEK_API_KEY"}, status_code=503)
@@ -1560,6 +1611,12 @@ async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
 async def chat(payload: ChatRequest) -> JSONResponse:
     started = time.perf_counter()
     state = sessions.setdefault(payload.session_id, {"history": []})
+    policy = check_question_policy(payload.question)
+    if not policy.allowed:
+        answer = policy.reason or "当前问题超出系统安全边界。"
+        state["history"] = (state.get("history", []) + [{"question": payload.question, "route": "out_of_scope", "result": {"tool": "out_of_scope"}, "answer": answer}])[-8:]
+        audit({"session_id": payload.session_id, "route":"out_of_scope", "tool":"out_of_scope", "validated":True, "status":"policy_blocked", "elapsed_ms":round((time.perf_counter()-started)*1000)})
+        return JSONResponse({"answer": answer, "sources": [], "route": "out_of_scope", "tool": "out_of_scope", "tool_result": {"tool":"out_of_scope", "policy_blocked": True}, "validation": {"valid": True, "policy_blocked": True}, "elapsed_ms": round((time.perf_counter()-started)*1000)})
     context = attach_erp_lookup(payload.context, payload.erp_lookup)
     try:
         answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, context, state.get("history", []))
