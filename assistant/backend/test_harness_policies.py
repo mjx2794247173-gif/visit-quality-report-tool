@@ -1,4 +1,4 @@
-from .harness import MAX_GENERAL_TOOL_CALLS, bound_tool_calls, check_question_policy
+from .harness import MAX_GENERAL_TOOL_CALLS, bound_tool_calls, check_question_policy, side_effect_key
 
 
 def test_photo_fraud_judgement_is_blocked_before_agent_routing():
@@ -22,3 +22,8 @@ def test_general_agent_tool_calls_are_bounded():
     bounded, truncated = bound_tool_calls(calls)
     assert len(bounded) == MAX_GENERAL_TOOL_CALLS
     assert truncated is True
+
+
+def test_side_effect_key_is_stable_and_session_scoped():
+    assert side_effect_key("session-a", "same") == side_effect_key("session-a", "same")
+    assert side_effect_key("session-a", "same") != side_effect_key("session-b", "same")

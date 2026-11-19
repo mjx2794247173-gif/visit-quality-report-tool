@@ -30,7 +30,7 @@ from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
-from .harness import bound_tool_calls, check_question_policy
+from .harness import bound_tool_calls, check_question_policy, side_effect_key
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
@@ -61,6 +61,7 @@ _rag_collection = None
 _rag_model = None
 _retrieval_cache: OrderedDict[str, tuple[float, list[dict[str, str]]]] = OrderedDict()
 _plan_cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_sent_side_effects: set[str] = set()
 
 
 class ChatRequest(BaseModel):
@@ -1591,6 +1592,10 @@ async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
     """Publish one explicitly confirmed assistant answer through official MCP."""
     if not payload.confirmed:
         return JSONResponse({"error": "发送前必须由用户确认"}, status_code=400)
+    effect_key = side_effect_key(payload.session_id, payload.content)
+    if effect_key in _sent_side_effects:
+        audit({"session_id": payload.session_id, "action":"feishu_publish", "ok":False, "status":"duplicate_blocked"})
+        return JSONResponse({"error": "相同内容已经发送过，已阻止重复发送", "duplicate": True}, status_code=409)
     status = get_feishu_status()
     if not status["configured"]:
         return JSONResponse(
@@ -1605,6 +1610,7 @@ async def feishu_send(payload: FeishuSendRequest) -> JSONResponse:
         audit({"session_id": payload.session_id, "action": "feishu_publish", "ok": False, "error_type": type(exc).__name__})
         return JSONResponse({"error": "飞书推送失败", "detail": str(exc)}, status_code=502)
     elapsed = round((time.perf_counter() - started) * 1000)
+    _sent_side_effects.add(effect_key)
     audit({"session_id": payload.session_id, "action": "feishu_publish", "ok": True, "tool": result["tool"], "elapsed_ms": elapsed})
     return JSONResponse({**result, "elapsed_ms": elapsed})
 

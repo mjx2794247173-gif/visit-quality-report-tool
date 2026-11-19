@@ -7,6 +7,7 @@ before routing or tool execution.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import re
 
 MAX_GENERAL_TOOL_CALLS = 2
@@ -48,4 +49,10 @@ def bound_tool_calls(calls: list[dict]) -> tuple[list[dict], bool]:
     """Limit one model planning turn to a small, observable tool budget."""
     bounded = calls[:MAX_GENERAL_TOOL_CALLS]
     return bounded, len(calls) > len(bounded)
+
+
+def side_effect_key(session_id: str, content: str) -> str:
+    """Stable key for preventing duplicate sends within one assistant session."""
+    material = f"{session_id}\n{content}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
