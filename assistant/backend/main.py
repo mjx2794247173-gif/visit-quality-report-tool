@@ -30,7 +30,7 @@ from langgraph.graph import END, StateGraph
 from .tools import attach_erp_lookup, choose_tool, TOOL_DEFINITIONS, execute_tool, extract_erp, validate_tool_result, validate_tool_result_against_plan
 from .supervisor import supervise
 from .feishu import get_feishu_status, send_feishu_message
-from .harness import check_question_policy
+from .harness import bound_tool_calls, check_question_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "server" / ".env", override=True)
@@ -1509,7 +1509,9 @@ async def call_deepseek_function_calling(question: str, context: str, history: l
             if not direct:
                 raise RuntimeError("General Agent 未返回回答或工具调用")
             return direct, "direct_answer", {"tool":"direct_answer","validation":{"valid":True}}, []
-        ordered_calls = calls
+        ordered_calls, calls_truncated = bound_tool_calls(calls)
+        if calls_truncated:
+            logger.warning("general_agent_tool_calls_truncated total=%s max=%s", len(calls), len(ordered_calls))
         results = []
         tool_messages = []
         for index, call in enumerate(ordered_calls):
@@ -1622,7 +1624,8 @@ async def chat(payload: ChatRequest) -> JSONResponse:
         answer, tool_name, tool_result, sources = await call_deepseek_function_calling(payload.question, context, state.get("history", []))
     except Exception as exc:
         logger.exception("assistant_call_failed")
-        return JSONResponse({"error":"模型调用失败","detail":str(exc),"route":selected["tool"],"tool_result":selected.get("result")}, status_code=502)
+        audit({"session_id": payload.session_id, "route": "general_agent", "tool": "unknown", "validated": False, "status": "model_call_failed", "error_type": type(exc).__name__, "elapsed_ms": round((time.perf_counter() - started) * 1000)})
+        return JSONResponse({"error":"模型调用失败","detail":str(exc)}, status_code=502)
     state["last_question"] = payload.question
     history_result = summarize_history_result(tool_name, tool_result or {}) if isinstance(tool_result, dict) else {"tool": tool_name}
     state["history"] = (state.get("history", []) + [{"question": payload.question, "route": tool_name, "result": history_result, "answer": answer}])[-8:]

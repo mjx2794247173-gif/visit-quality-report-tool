@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+MAX_GENERAL_TOOL_CALLS = 2
+
 
 @dataclass(frozen=True)
 class PolicyDecision:
@@ -40,4 +42,10 @@ def check_question_policy(question: str) -> PolicyDecision:
             reason="不能查看照片或根据反馈内容自行判断虚假拜访；只能使用 CRM 已识别的质检问题类型。",
         )
     return PolicyDecision(allowed=True)
+
+
+def bound_tool_calls(calls: list[dict]) -> tuple[list[dict], bool]:
+    """Limit one model planning turn to a small, observable tool budget."""
+    bounded = calls[:MAX_GENERAL_TOOL_CALLS]
+    return bounded, len(calls) > len(bounded)
 
