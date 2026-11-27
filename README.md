@@ -17,7 +17,7 @@
 
 ## 快速体验
 
-1. 打开 [`assistant/index.html`](assistant/index.html)，或按 [`assistant/README.md`](assistant/README.md) 启动本地服务。
+1. 不要直接点击 GitHub 上的 `assistant/index.html` 运行页面；请按 [`assistant/README.md`](assistant/README.md) 启动本地服务，启动后访问 `http://127.0.0.1:8788/`。该链接仅用于查看前端源码。
 2. 上传 CRM 导出的 `.xlsx` 或 `.csv`，也可以加载脱敏示例：[`assistant/sample_data/crm_visit_quality_demo.csv`](assistant/sample_data/crm_visit_quality_demo.csv)。
 3. 设置省区和日期范围，选择“我要问答”或“我要通报”。
 4. 使用自然语言提问，例如“谁的问题最多？”或“山东省区连续多天出现问题的站长是谁？”。
